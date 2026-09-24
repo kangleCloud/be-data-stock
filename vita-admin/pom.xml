@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.vita</groupId>
+        <artifactId>be-data-stock</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>vita-admin</artifactId>
+    <name>vita-admin</name>
+    <packaging>jar</packaging>
+    <description>Admin Spring Boot Application</description>
+
+    <dependencies>
+        <!-- Web 支持，HTTP 服务、Tomcat 内嵌服务器 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- 业务服务层（包含认证、RBAC、系统管理等） -->
+        <dependency>
+            <groupId>com.vita</groupId>
+            <artifactId>vita-service</artifactId>
+        </dependency>
+
+        <!-- 工作流基础设施模块 -->
+        <dependency>
+            <groupId>com.vita</groupId>
+            <artifactId>vita-workflow</artifactId>
+        </dependency>
+
+        <!-- Warm-Flow 设计器 UI，仅 admin 暴露 -->
+        <dependency>
+            <groupId>org.dromara.warm</groupId>
+            <artifactId>warm-flow-plugin-ui-sb-web</artifactId>
+        </dependency>
+
+        <!-- 文件上传/存储 Starter -->
+        <dependency>
+            <groupId>com.vita</groupId>
+            <artifactId>vita-file-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Spring Boot 测试框架 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <mainClass>com.vita.config.VitaAdminApplication</mainClass>
+                    <workingDirectory>${project.parent.basedir}</workingDirectory>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

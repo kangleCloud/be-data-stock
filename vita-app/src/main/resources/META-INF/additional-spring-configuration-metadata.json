@@ -1,0 +1,42 @@
+{
+  "properties": [
+    {
+      "name": "vita.app.oauth.frontend-redirect-uri",
+      "type": "java.lang.String",
+      "description": "OAuth回调完成后唯一允许跳转的前端地址。"
+    },
+    {
+      "name": "vita.app.oauth.state-timeout",
+      "type": "java.time.Duration",
+      "defaultValue": "5m",
+      "description": "OAuth state有效期。"
+    },
+    {
+      "name": "vita.app.oauth.ticket-timeout",
+      "type": "java.time.Duration",
+      "defaultValue": "60s",
+      "description": "OAuth一次性票据有效期。"
+    },
+    {
+      "name": "vita.app.oauth.github.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": false,
+      "description": "是否启用GitHub OAuth适配器。"
+    },
+    {
+      "name": "vita.app.oauth.github.client-id",
+      "type": "java.lang.String",
+      "description": "GitHub OAuth App客户端ID。"
+    },
+    {
+      "name": "vita.app.oauth.github.client-secret",
+      "type": "java.lang.String",
+      "description": "GitHub OAuth App客户端密钥，仅通过环境变量提供。"
+    },
+    {
+      "name": "vita.app.oauth.github.callback-uri",
+      "type": "java.lang.String",
+      "description": "GitHub OAuth App固定回调地址。"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+package ${voPackage};
+
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+/**
+ * @BelongsProject: ${projectName}
+ * @BelongsPackage: ${voPackage}
+ * @Author ${author}
+ * @CreateTime ${date}
+ * @Description: ${table.comment} 分页 VO
+ * @version 1.0
+ */
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class ${entity}PageVo extends ${entity}ListVo {
+}

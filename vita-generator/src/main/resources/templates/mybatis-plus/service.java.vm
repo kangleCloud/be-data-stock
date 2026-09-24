@@ -1,0 +1,75 @@
+package ${package.Service};
+
+import ${superServiceClassPackage};
+import ${commonPackage}.page.PageResponse;
+import ${dtoPackage}.${entity}CreateDto;
+import ${dtoPackage}.${entity}DeletedDto;
+import ${dtoPackage}.${entity}SearchDto;
+import ${dtoPackage}.${entity}UpdateDto;
+import ${package.Entity}.${entity};
+import ${voPackage}.${entity}DetailVo;
+import ${voPackage}.${entity}ListVo;
+import ${voPackage}.${entity}PageVo;
+
+import java.util.List;
+
+/**
+ * @BelongsProject: ${projectName}
+ * @BelongsPackage: ${package.Service}
+ * @Author ${author}
+ * @CreateTime ${date}
+ * @Description: ${table.comment} Service 接口
+ * @version 1.0
+ */
+#if(${kotlin})
+interface ${table.serviceName} : ${superServiceClass}<${entity}>
+#else
+public interface ${table.serviceName} extends ${superServiceClass}<${entity}> {
+
+    /**
+     * 新增数据。
+     *
+     * @param createDto 创建请求对象
+     * @return 新增记录ID
+     */
+    Long create(${entity}CreateDto createDto);
+
+    /**
+     * 更新数据。
+     *
+     * @param updateDto 更新请求对象
+     */
+    void update(${entity}UpdateDto updateDto);
+
+    /**
+     * 删除数据。
+     *
+     * @param deletedDto 删除请求对象
+     */
+    void delete(${entity}DeletedDto deletedDto);
+
+    /**
+     * 查询单条数据。
+     *
+     * @param id 主键ID
+     * @return 详情对象
+     */
+    ${entity}DetailVo get(Long id);
+
+    /**
+     * 列表查询。
+     *
+     * @param searchDto 查询条件
+     * @return 列表VO
+     */
+    List<${entity}ListVo> list(${entity}SearchDto searchDto);
+
+    /**
+     * 分页查询。
+     *
+     * @param searchDto 分页查询条件
+     * @return 分页VO结果
+     */
+    PageResponse<${entity}PageVo> page(${entity}SearchDto searchDto);
+}
+#end

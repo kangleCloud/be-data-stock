@@ -1,0 +1,531 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vita.workflow.runtime.mapper.WorkflowRuntimeQueryMapper">
+
+    <sql id="definitionColumns">
+        d.id,
+        d.flow_code,
+        d.flow_name,
+        d.category,
+        c.category_name,
+        d.version,
+        d.is_publish,
+        d.activity_status,
+        d.form_custom,
+        d.form_path,
+        d.create_time,
+        d.update_time
+    </sql>
+
+    <sql id="instanceColumns">
+        i.id AS instance_id,
+        i.definition_id,
+        i.business_id,
+        COALESCE(m.business_code, d.flow_code) AS business_code,
+        COALESCE(m.business_title, i.business_id) AS business_title,
+        d.flow_code,
+        d.flow_name,
+        d.category,
+        c.category_name,
+        i.node_type,
+        i.node_code,
+        i.node_name,
+        i.flow_status,
+        i.activity_status,
+        i.create_by AS initiator_id,
+        u.nick_name AS initiator_name,
+        i.create_time,
+        i.update_time
+    </sql>
+
+    <select id="selectDefinitionPage" resultType="com.vita.workflow.runtime.vo.WorkflowDefinitionVo">
+        SELECT
+        <include refid="definitionColumns"/>
+        FROM flow_definition d
+        LEFT JOIN workflow_category c
+            ON c.category_code = d.category AND c.is_deleted = 0
+        WHERE d.del_flag = '0'
+        <if test="publishedOnly">
+            AND d.is_publish = 1
+            AND d.activity_status = 1
+        </if>
+        <if test="query.category != null and query.category != ''">
+            AND d.category = #{query.category}
+        </if>
+        <if test="query.isPublish != null">
+            AND d.is_publish = #{query.isPublish}
+        </if>
+        <if test="query.activityStatus != null">
+            AND d.activity_status = #{query.activityStatus}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (d.flow_code LIKE CONCAT('%', #{query.keyword}, '%')
+                OR d.flow_name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        ORDER BY d.update_time DESC, d.id DESC
+    </select>
+
+    <select id="selectDefinitionById" resultType="com.vita.workflow.runtime.vo.WorkflowDefinitionVo">
+        SELECT
+        <include refid="definitionColumns"/>
+        FROM flow_definition d
+        LEFT JOIN workflow_category c
+            ON c.category_code = d.category AND c.is_deleted = 0
+        WHERE d.id = #{definitionId}
+          AND d.del_flag = '0'
+    </select>
+
+    <select id="selectInstancePage" resultType="com.vita.workflow.runtime.vo.WorkflowInstanceVo">
+        SELECT
+        <include refid="instanceColumns"/>
+        FROM flow_instance i
+        INNER JOIN flow_definition d ON d.id = i.definition_id AND d.del_flag = '0'
+        LEFT JOIN workflow_category c
+            ON c.category_code = d.category AND c.is_deleted = 0
+        LEFT JOIN sys_user u
+            ON CAST(u.id AS CHAR) = i.create_by AND u.is_deleted = 0
+        LEFT JOIN workflow_instance_metadata m
+            ON m.instance_id = i.id AND m.is_deleted = 0
+        WHERE i.del_flag = '0'
+        <if test="initiatorId != null and initiatorId != ''">
+            AND i.create_by = #{initiatorId}
+        </if>
+        <if test="finished != null and finished">
+            AND i.node_type = 2
+        </if>
+        <if test="finished != null and finished == false">
+            AND i.node_type != 2
+        </if>
+        <if test="query.flowCode != null and query.flowCode != ''">
+            AND d.flow_code = #{query.flowCode}
+        </if>
+        <if test="query.flowStatus != null and query.flowStatus != ''">
+            AND i.flow_status = #{query.flowStatus}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (i.business_id LIKE CONCAT('%', #{query.keyword}, '%')
+                OR d.flow_code LIKE CONCAT('%', #{query.keyword}, '%')
+                OR d.flow_name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        ORDER BY i.update_time DESC, i.id DESC
+    </select>
+
+    <select id="selectInstanceById" resultType="com.vita.workflow.runtime.vo.WorkflowInstanceVo">
+        SELECT
+        <include refid="instanceColumns"/>
+        FROM flow_instance i
+        INNER JOIN flow_definition d ON d.id = i.definition_id AND d.del_flag = '0'
+        LEFT JOIN workflow_category c
+            ON c.category_code = d.category AND c.is_deleted = 0
+        LEFT JOIN sys_user u
+            ON CAST(u.id AS CHAR) = i.create_by AND u.is_deleted = 0
+        LEFT JOIN workflow_instance_metadata m
+            ON m.instance_id = i.id AND m.is_deleted = 0
+        WHERE i.id = #{instanceId}
+          AND i.del_flag = '0'
+    </select>
+
+    <select id="selectInstanceByBusinessId" resultType="com.vita.workflow.runtime.vo.WorkflowInstanceVo">
+        SELECT
+        <include refid="instanceColumns"/>
+        FROM flow_instance i
+        INNER JOIN flow_definition d ON d.id = i.definition_id AND d.del_flag = '0'
+        LEFT JOIN workflow_category c
+            ON c.category_code = d.category AND c.is_deleted = 0
+        LEFT JOIN sys_user u
+            ON CAST(u.id AS CHAR) = i.create_by AND u.is_deleted = 0
+        LEFT JOIN workflow_instance_metadata m
+            ON m.instance_id = i.id AND m.is_deleted = 0
+        WHERE i.business_id = #{businessId}
+          AND i.del_flag = '0'
+        LIMIT 1
+    </select>
+
+    <select id="selectPendingTaskPage" resultType="com.vita.workflow.runtime.vo.WorkflowTaskVo">
+        SELECT DISTINCT
+            t.id AS task_id,
+            t.instance_id,
+            t.definition_id,
+            i.business_id,
+            COALESCE(m.business_code, d.flow_code) AS business_code,
+            COALESCE(m.business_title, i.business_id) AS business_title,
+            d.flow_code,
+            d.flow_name,
+            t.node_code,
+            t.node_name,
+            t.flow_status,
+            t.form_custom,
+            t.form_path,
+            n.any_node_skip AS allowed_reject_node_code,
+            t.create_time,
+            t.update_time
+        FROM flow_task t
+        INNER JOIN flow_instance i ON i.id = t.instance_id AND i.del_flag = '0'
+        INNER JOIN flow_definition d ON d.id = t.definition_id AND d.del_flag = '0'
+        INNER JOIN flow_user fu ON fu.associated = t.id AND fu.del_flag = '0'
+        LEFT JOIN flow_node n
+            ON n.definition_id = t.definition_id
+            AND n.node_code = t.node_code
+            AND n.del_flag = '0'
+        LEFT JOIN workflow_instance_metadata m
+            ON m.instance_id = i.id AND m.is_deleted = 0
+        WHERE t.del_flag = '0'
+          AND t.node_type = 1
+          AND fu.type IN ('1', '2', '3')
+          AND fu.processed_by IN
+          <foreach collection="permissions" item="permission" open="(" separator="," close=")">
+              #{permission}
+          </foreach>
+        <if test="query.flowCode != null and query.flowCode != ''">
+            AND d.flow_code = #{query.flowCode}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (i.business_id LIKE CONCAT('%', #{query.keyword}, '%')
+                OR d.flow_name LIKE CONCAT('%', #{query.keyword}, '%')
+                OR t.node_name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        ORDER BY t.create_time DESC, t.id DESC
+    </select>
+
+    <select id="selectCompletedTaskPage" resultType="com.vita.workflow.runtime.vo.WorkflowTaskVo">
+        SELECT
+            h.task_id,
+            h.id AS history_id,
+            h.instance_id,
+            h.definition_id,
+            i.business_id,
+            COALESCE(m.business_code, d.flow_code) AS business_code,
+            COALESCE(m.business_title, i.business_id) AS business_title,
+            d.flow_code,
+            d.flow_name,
+            h.node_code,
+            h.node_name,
+            h.flow_status,
+            h.form_custom,
+            h.form_path,
+            h.approver AS approver_id,
+            u.nick_name AS approver_name,
+            h.message,
+            h.ext AS attachment_ref,
+            h.create_time,
+            h.update_time
+        FROM flow_his_task h
+        INNER JOIN flow_instance i ON i.id = h.instance_id AND i.del_flag = '0'
+        INNER JOIN flow_definition d ON d.id = h.definition_id AND d.del_flag = '0'
+        LEFT JOIN sys_user u
+            ON CAST(u.id AS CHAR) = h.approver AND u.is_deleted = 0
+        LEFT JOIN workflow_instance_metadata m
+            ON m.instance_id = i.id AND m.is_deleted = 0
+        WHERE h.del_flag = '0'
+          AND h.node_type = 1
+          AND h.approver = #{approverId}
+        <if test="query.flowCode != null and query.flowCode != ''">
+            AND d.flow_code = #{query.flowCode}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (i.business_id LIKE CONCAT('%', #{query.keyword}, '%')
+                OR d.flow_name LIKE CONCAT('%', #{query.keyword}, '%')
+                OR h.node_name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        ORDER BY h.update_time DESC, h.id DESC
+    </select>
+
+    <select id="selectTaskById" resultType="com.vita.workflow.runtime.vo.WorkflowTaskVo">
+        SELECT
+            t.id AS task_id,
+            t.instance_id,
+            t.definition_id,
+            i.business_id,
+            COALESCE(m.business_code, d.flow_code) AS business_code,
+            COALESCE(m.business_title, i.business_id) AS business_title,
+            d.flow_code,
+            d.flow_name,
+            t.node_code,
+            t.node_name,
+            t.flow_status,
+            t.form_custom,
+            t.form_path,
+            n.any_node_skip AS allowed_reject_node_code,
+            t.create_time,
+            t.update_time
+        FROM flow_task t
+        INNER JOIN flow_instance i ON i.id = t.instance_id AND i.del_flag = '0'
+        INNER JOIN flow_definition d ON d.id = t.definition_id AND d.del_flag = '0'
+        LEFT JOIN flow_node n
+            ON n.definition_id = t.definition_id
+            AND n.node_code = t.node_code
+            AND n.del_flag = '0'
+        LEFT JOIN workflow_instance_metadata m
+            ON m.instance_id = i.id AND m.is_deleted = 0
+        WHERE t.id = #{taskId}
+          AND t.del_flag = '0'
+    </select>
+
+    <select id="selectHistoryByInstanceId" resultType="com.vita.workflow.runtime.vo.WorkflowHistoryVo">
+        SELECT
+            h.id AS history_id,
+            h.task_id,
+            h.instance_id,
+            h.node_type,
+            h.node_code,
+            h.node_name,
+            h.target_node_code,
+            h.target_node_name,
+            h.approver AS approver_id,
+            u.nick_name AS approver_name,
+            h.skip_type,
+            h.flow_status,
+            h.message,
+            h.ext AS attachment_ref,
+            h.create_time,
+            h.update_time
+        FROM flow_his_task h
+        LEFT JOIN sys_user u
+            ON CAST(u.id AS CHAR) = h.approver AND u.is_deleted = 0
+        WHERE h.instance_id = #{instanceId}
+          AND h.del_flag = '0'
+        ORDER BY h.create_time ASC, h.id ASC
+    </select>
+
+    <select id="countInstanceAccess" resultType="long">
+        SELECT COUNT(1)
+        FROM flow_instance i
+        WHERE i.id = #{instanceId}
+          AND i.del_flag = '0'
+          AND (
+              i.create_by = #{userId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM flow_task t
+                  INNER JOIN flow_user fu ON fu.associated = t.id AND fu.del_flag = '0'
+                  WHERE t.instance_id = i.id
+                    AND t.del_flag = '0'
+                    AND fu.type IN ('1', '2', '3')
+                    AND fu.processed_by IN
+                    <foreach collection="permissions" item="permission" open="(" separator="," close=")">
+                        #{permission}
+                    </foreach>
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM flow_his_task h
+                  WHERE h.instance_id = i.id
+                    AND h.del_flag = '0'
+                    AND h.approver = #{userId}
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM workflow_task_copy cp
+                  WHERE cp.instance_id = i.id
+                    AND cp.recipient_user_id = CAST(#{userId} AS UNSIGNED)
+                    AND cp.is_deleted = 0
+              )
+          )
+    </select>
+
+    <select id="countInstanceAccessByBusinessId" resultType="long">
+        SELECT COUNT(1)
+        FROM flow_instance i
+        WHERE i.business_id = #{businessId}
+          AND i.del_flag = '0'
+          AND (
+              i.create_by = #{userId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM flow_task t
+                  INNER JOIN flow_user fu ON fu.associated = t.id AND fu.del_flag = '0'
+                  WHERE t.instance_id = i.id
+                    AND t.del_flag = '0'
+                    AND fu.type IN ('1', '2', '3')
+                    AND fu.processed_by IN
+                    <foreach collection="permissions" item="permission" open="(" separator="," close=")">
+                        #{permission}
+                    </foreach>
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM flow_his_task h
+                  WHERE h.instance_id = i.id
+                    AND h.del_flag = '0'
+                    AND h.approver = #{userId}
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM workflow_task_copy cp
+                  WHERE cp.instance_id = i.id
+                    AND cp.recipient_user_id = CAST(#{userId} AS UNSIGNED)
+                    AND cp.is_deleted = 0
+              )
+          )
+    </select>
+
+    <select id="countTaskAccess" resultType="long">
+        SELECT COUNT(1)
+        FROM flow_task t
+        INNER JOIN flow_user fu ON fu.associated = t.id AND fu.del_flag = '0'
+        WHERE t.id = #{taskId}
+          AND t.del_flag = '0'
+          AND fu.type IN ('1', '2', '3')
+          AND fu.processed_by IN
+          <foreach collection="permissions" item="permission" open="(" separator="," close=")">
+              #{permission}
+          </foreach>
+    </select>
+
+    <select id="countInstancesByDefinitionId" resultType="long">
+        SELECT COUNT(1)
+        FROM flow_instance
+        WHERE definition_id = #{definitionId}
+    </select>
+
+    <select id="selectCurrentTaskId" resultType="long">
+        SELECT id
+        FROM flow_task
+        WHERE instance_id = #{instanceId}
+          AND del_flag = '0'
+        ORDER BY id ASC
+        LIMIT 1
+    </select>
+
+    <select id="selectLatestHistoryIdByTaskId" resultType="long">
+        SELECT id
+        FROM flow_his_task
+        WHERE task_id = #{taskId}
+          AND del_flag = '0'
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectAllPendingTaskPage" resultType="com.vita.workflow.runtime.vo.WorkflowTaskVo">
+        SELECT DISTINCT
+            t.id AS task_id,
+            t.instance_id,
+            t.definition_id,
+            i.business_id,
+            COALESCE(m.business_code, d.flow_code) AS business_code,
+            COALESCE(m.business_title, i.business_id) AS business_title,
+            d.flow_code,
+            d.flow_name,
+            t.node_code,
+            t.node_name,
+            t.flow_status,
+            t.form_custom,
+            t.form_path,
+            n.any_node_skip AS allowed_reject_node_code,
+            t.create_time,
+            t.update_time
+        FROM flow_task t
+        INNER JOIN flow_instance i ON i.id = t.instance_id AND i.del_flag = '0'
+        INNER JOIN flow_definition d ON d.id = t.definition_id AND d.del_flag = '0'
+        LEFT JOIN flow_node n
+            ON n.definition_id = t.definition_id
+            AND n.node_code = t.node_code
+            AND n.del_flag = '0'
+        LEFT JOIN workflow_instance_metadata m
+            ON m.instance_id = i.id AND m.is_deleted = 0
+        WHERE t.del_flag = '0'
+          AND t.node_type = 1
+        <if test="query.flowCode != null and query.flowCode != ''">
+            AND d.flow_code = #{query.flowCode}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (i.business_id LIKE CONCAT('%', #{query.keyword}, '%')
+                OR m.business_title LIKE CONCAT('%', #{query.keyword}, '%')
+                OR d.flow_name LIKE CONCAT('%', #{query.keyword}, '%')
+                OR t.node_name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        ORDER BY t.create_time DESC, t.id DESC
+    </select>
+
+    <select id="selectAllCompletedTaskPage" resultType="com.vita.workflow.runtime.vo.WorkflowTaskVo">
+        SELECT
+            h.task_id,
+            h.id AS history_id,
+            h.instance_id,
+            h.definition_id,
+            i.business_id,
+            COALESCE(m.business_code, d.flow_code) AS business_code,
+            COALESCE(m.business_title, i.business_id) AS business_title,
+            d.flow_code,
+            d.flow_name,
+            h.node_code,
+            h.node_name,
+            h.flow_status,
+            h.form_custom,
+            h.form_path,
+            h.approver AS approver_id,
+            u.nick_name AS approver_name,
+            h.message,
+            h.ext AS attachment_ref,
+            h.create_time,
+            h.update_time
+        FROM flow_his_task h
+        INNER JOIN flow_instance i ON i.id = h.instance_id AND i.del_flag = '0'
+        INNER JOIN flow_definition d ON d.id = h.definition_id AND d.del_flag = '0'
+        LEFT JOIN sys_user u
+            ON CAST(u.id AS CHAR) = h.approver AND u.is_deleted = 0
+        LEFT JOIN workflow_instance_metadata m
+            ON m.instance_id = i.id AND m.is_deleted = 0
+        WHERE h.del_flag = '0'
+          AND h.node_type = 1
+        <if test="query.flowCode != null and query.flowCode != ''">
+            AND d.flow_code = #{query.flowCode}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (i.business_id LIKE CONCAT('%', #{query.keyword}, '%')
+                OR m.business_title LIKE CONCAT('%', #{query.keyword}, '%')
+                OR d.flow_name LIKE CONCAT('%', #{query.keyword}, '%')
+                OR h.node_name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        ORDER BY h.update_time DESC, h.id DESC
+    </select>
+
+    <select id="selectCopiedTaskPage" resultType="com.vita.workflow.runtime.vo.WorkflowCopyVo">
+        SELECT
+            cp.id AS copy_id,
+            cp.instance_id,
+            cp.history_task_id,
+            cp.business_id,
+            COALESCE(m.business_code, d.flow_code) AS business_code,
+            COALESCE(m.business_title, cp.business_id) AS business_title,
+            d.flow_code,
+            d.flow_name,
+            cp.source_node_code,
+            cp.source_node_name,
+            cp.message,
+            cp.attachment_ref,
+            cp.create_time
+        FROM workflow_task_copy cp
+        INNER JOIN flow_instance i ON i.id = cp.instance_id AND i.del_flag = '0'
+        INNER JOIN flow_definition d ON d.id = i.definition_id AND d.del_flag = '0'
+        LEFT JOIN workflow_instance_metadata m
+            ON m.instance_id = cp.instance_id AND m.is_deleted = 0
+        WHERE cp.recipient_user_id = #{recipientUserId}
+          AND cp.is_deleted = 0
+        <if test="query.flowCode != null and query.flowCode != ''">
+            AND d.flow_code = #{query.flowCode}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (cp.business_id LIKE CONCAT('%', #{query.keyword}, '%')
+                OR m.business_title LIKE CONCAT('%', #{query.keyword}, '%')
+                OR d.flow_name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        ORDER BY cp.create_time DESC, cp.id DESC
+    </select>
+
+    <select id="countDefinitionsByCategory" resultType="long">
+        SELECT COUNT(1)
+        FROM flow_definition
+        WHERE category = #{categoryCode}
+          AND del_flag = '0'
+    </select>
+
+    <select id="countNodesByPermissionExpression" resultType="long">
+        SELECT COUNT(1)
+        FROM flow_node
+        WHERE permission_flag LIKE CONCAT('%', #{expression}, '%')
+          AND del_flag = '0'
+    </select>
+</mapper>

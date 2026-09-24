@@ -1,0 +1,123 @@
+{
+  "flowCode": "REIMBURSE_APPROVAL_V1",
+  "flowName": "报销审批流程 V1",
+  "modelValue": "CLASSICS",
+  "category": "REIMBURSE",
+  "version": "1",
+  "formCustom": "N",
+  "nodeList": [
+    {
+      "nodeType": 0,
+      "nodeCode": "start",
+      "nodeName": "开始",
+      "nodeRatio": "0",
+      "coordinate": "700,100",
+      "skipList": [
+        {
+          "nowNodeCode": "start",
+          "nextNodeCode": "submit_apply",
+          "skipName": "发起",
+          "skipType": "PASS",
+          "coordinate": "700,140;700,210"
+        }
+      ]
+    },
+    {
+      "nodeType": 1,
+      "nodeCode": "submit_apply",
+      "nodeName": "员工发起",
+      "permissionFlag": "${applicantPermission}@@role:SUPER_ADMIN@@role:SUB_ADMIN",
+      "nodeRatio": "0",
+      "coordinate": "700,250",
+      "skipList": [
+        {
+          "nowNodeCode": "submit_apply",
+          "nextNodeCode": "dept_leader_approve",
+          "skipName": "提交申请",
+          "skipType": "PASS",
+          "coordinate": "700,290;700,360"
+        }
+      ]
+    },
+    {
+      "nodeType": 1,
+      "nodeCode": "dept_leader_approve",
+      "nodeName": "部门主管审批",
+      "permissionFlag": "${deptLeaderPermission}@@role:SUPER_ADMIN@@role:SUB_ADMIN",
+      "nodeRatio": "0",
+      "anyNodeSkip": "submit_apply",
+      "coordinate": "700,400",
+      "skipList": [
+        {
+          "nowNodeCode": "dept_leader_approve",
+          "nextNodeCode": "finance_approve",
+          "skipName": "主管通过",
+          "skipType": "PASS",
+          "coordinate": "700,440;700,510"
+        }
+      ]
+    },
+    {
+      "nodeType": 1,
+      "nodeCode": "finance_approve",
+      "nodeName": "财务审批",
+      "permissionFlag": "role:FINANCE_APPROVER@@role:SUPER_ADMIN@@role:SUB_ADMIN",
+      "nodeRatio": "0",
+      "anyNodeSkip": "submit_apply",
+      "coordinate": "700,550",
+      "skipList": [
+        {
+          "nowNodeCode": "finance_approve",
+          "nextNodeCode": "general_affairs_approve",
+          "skipName": "财务通过",
+          "skipType": "PASS",
+          "coordinate": "700,590;700,660"
+        }
+      ]
+    },
+    {
+      "nodeType": 1,
+      "nodeCode": "general_affairs_approve",
+      "nodeName": "综合管理部审批",
+      "permissionFlag": "role:GENERAL_AFFAIRS_APPROVER@@role:SUPER_ADMIN@@role:SUB_ADMIN",
+      "nodeRatio": "0",
+      "anyNodeSkip": "submit_apply",
+      "coordinate": "700,700",
+      "skipList": [
+        {
+          "nowNodeCode": "general_affairs_approve",
+          "nextNodeCode": "general_manager_approve",
+          "skipName": "综合管理部通过",
+          "skipType": "PASS",
+          "coordinate": "700,740;700,810"
+        }
+      ]
+    },
+    {
+      "nodeType": 1,
+      "nodeCode": "general_manager_approve",
+      "nodeName": "总经理审批",
+      "permissionFlag": "role:GENERAL_MANAGER_APPROVER@@role:SUPER_ADMIN@@role:SUB_ADMIN",
+      "nodeRatio": "0",
+      "anyNodeSkip": "submit_apply",
+      "coordinate": "700,850",
+      "skipList": [
+        {
+          "nowNodeCode": "general_manager_approve",
+          "nextNodeCode": "end",
+          "skipName": "总经理通过",
+          "skipType": "PASS",
+          "coordinate": "700,890;700,960"
+        }
+      ]
+    },
+    {
+      "nodeType": 2,
+      "nodeCode": "end",
+      "nodeName": "完成",
+      "nodeRatio": "0",
+      "coordinate": "700,1000",
+      "skipList": []
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+package ${voPackage};
+
+import lombok.Data;
+#set($hasLocalDateTime = false)
+#set($hasLocalDate = false)
+#set($hasLocalTime = false)
+#set($hasDate = false)
+#foreach($field in ${table.fields})
+    #if($field.columnType && $field.columnType.pkg == "java.time.LocalDateTime")
+    #set($hasLocalDateTime = true)
+    #elseif($field.columnType && $field.columnType.pkg == "java.time.LocalDate")
+    #set($hasLocalDate = true)
+    #elseif($field.columnType && $field.columnType.pkg == "java.time.LocalTime")
+    #set($hasLocalTime = true)
+    #elseif($field.columnType && $field.columnType.pkg == "java.util.Date")
+    #set($hasDate = true)
+    #end
+#end
+#if($hasLocalDateTime)
+import java.time.LocalDateTime;
+#end
+#if($hasLocalDate)
+import java.time.LocalDate;
+#end
+#if($hasLocalTime)
+import java.time.LocalTime;
+#end
+#if($hasDate)
+import java.util.Date;
+#end
+
+/**
+ * @BelongsProject: ${projectName}
+ * @BelongsPackage: ${voPackage}
+ * @Author ${author}
+ * @CreateTime ${date}
+ * @Description: ${table.comment} 列表 VO
+ * @version 1.0
+ */
+@Data
+public class ${entity}ListVo {
+
+    /**
+     * 主键ID。
+     */
+    private Long id;
+
+#foreach($field in ${table.fields})
+    #set($fieldType = $field.propertyType)
+    #if($field.columnType && $field.columnType.pkg == "java.util.Date")
+    #set($fieldType = "Date")
+    #elseif($field.columnType && $field.columnType.pkg && $field.columnType.pkg.startsWith("java.")
+        && $field.columnType.pkg != "java.time.LocalDateTime"
+        && $field.columnType.pkg != "java.time.LocalDate"
+        && $field.columnType.pkg != "java.time.LocalTime")
+    #set($fieldType = $field.columnType.pkg)
+    #end
+    #if("$!field.comment" != "")
+    /**
+     * ${field.comment}
+     */
+    #end
+    private ${fieldType} ${field.propertyName};
+
+#end
+}

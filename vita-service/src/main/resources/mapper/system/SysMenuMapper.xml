@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vita.system.sysMenu.mapper.SysMenuMapper">
+
+    <select id="selectAllEnabledMenus" resultType="com.vita.system.sysMenu.entity.SysMenu">
+        SELECT id,
+               parent_id,
+               menu_name,
+               menu_type,
+               route_name,
+               route_link,
+               component_path,
+               icon,
+               sort_no,
+               visible,
+               is_cache,
+               always_show,
+               is_external,
+               status,
+               is_system,
+               remark,
+               is_deleted,
+               tenant_id,
+               create_time,
+               create_by_id,
+               create_by,
+               update_time,
+               update_by_id,
+               update_by,
+               version
+        FROM sys_menu
+        WHERE status = 1
+          AND is_deleted = 0
+        ORDER BY sort_no ASC, id ASC
+    </select>
+</mapper>

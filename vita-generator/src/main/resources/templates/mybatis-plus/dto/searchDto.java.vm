@@ -1,0 +1,23 @@
+package ${dtoPackage};
+
+import ${commonPackage}.page.PageRequest;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+/**
+ * @BelongsProject: ${projectName}
+ * @BelongsPackage: ${dtoPackage}
+ * @Author ${author}
+ * @CreateTime ${date}
+ * @Description: ${table.comment} 搜索 DTO
+ * @version 1.0
+ */
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class ${entity}SearchDto extends PageRequest {
+
+    /**
+     * 关键字。
+     */
+    private String keyword;
+}

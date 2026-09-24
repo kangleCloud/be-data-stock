@@ -1,0 +1,70 @@
+{
+  "properties": [
+    {
+      "name": "vita.poi.excel.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Whether to enable the Excel starter."
+    },
+    {
+      "name": "vita.poi.excel.default-head-row-number",
+      "type": "java.lang.Integer",
+      "defaultValue": 1,
+      "description": "Default head row number used during import."
+    },
+    {
+      "name": "vita.poi.excel.default-import-batch-size",
+      "type": "java.lang.Integer",
+      "defaultValue": 100,
+      "description": "Default import batch size."
+    },
+    {
+      "name": "vita.poi.excel.default-export-page-size",
+      "type": "java.lang.Integer",
+      "defaultValue": 5000,
+      "description": "Default export page size."
+    },
+    {
+      "name": "vita.poi.excel.max-error-rows",
+      "type": "java.lang.Integer",
+      "defaultValue": 200,
+      "description": "Maximum number of import error details retained in the result."
+    },
+    {
+      "name": "vita.poi.excel.trim-cell-value",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Whether to trim cell text during import."
+    },
+    {
+      "name": "vita.poi.excel.ignore-empty-row",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Whether to ignore empty rows during import."
+    },
+    {
+      "name": "vita.poi.excel.auto-close-stream",
+      "type": "java.lang.Boolean",
+      "defaultValue": false,
+      "description": "Whether EasyExcel should close the caller provided stream automatically."
+    },
+    {
+      "name": "vita.poi.excel.in-memory",
+      "type": "java.lang.Boolean",
+      "defaultValue": false,
+      "description": "Whether write operations should use in-memory mode."
+    },
+    {
+      "name": "vita.poi.excel.use-default-style",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Whether EasyExcel default style is enabled."
+    },
+    {
+      "name": "vita.poi.excel.default-sheet-name",
+      "type": "java.lang.String",
+      "defaultValue": "Sheet1",
+      "description": "Default sheet name used when export/fill requests do not provide one."
+    }
+  ]
+}

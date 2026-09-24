@@ -1,0 +1,24 @@
+{
+  "properties": [
+    {
+      "name": "vita.addressEnabled",
+      "type": "java.lang.Boolean",
+      "description": "Description for vita.addressEnabled."
+    },
+    {
+      "name": "vita.copyrightYear",
+      "type": "java.lang.String",
+      "description": "Description for vita.copyrightYear."
+    },
+    {
+      "name": "vita.name",
+      "type": "java.lang.String",
+      "description": "Description for vita.name."
+    },
+    {
+      "name": "spring.data.redis.lettuce.pool.heartbeat",
+      "type": "java.lang.String",
+      "description": "Description for spring.data.redis.lettuce.pool.heartbeat."
+    }
+  ]
+}
