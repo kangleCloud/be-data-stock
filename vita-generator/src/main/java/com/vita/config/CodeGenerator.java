@@ -55,7 +55,7 @@ public class CodeGenerator {
     /**
      * 生成器配置 - DB NAME
      */
-    private static final String DB_NAME = "be_vita";
+    private static final String DB_NAME = "data_stock";
     /**
      * 生成器配置 - CODE AUTHOR
      */

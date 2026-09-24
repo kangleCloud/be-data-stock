@@ -5,7 +5,7 @@
  Source Server Type    : MySQL
  Source Server Version : 80037 (8.0.37)
  Source Host           : 106.54.205.33:3306
- Source Schema         : be_vita
+ Source Schema         : data_stock
 
  Target Server Type    : MySQL
  Target Server Version : 80037 (8.0.37)

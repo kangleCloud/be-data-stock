@@ -1,11 +1,15 @@
 package com.vita.core.exception;
 
 import com.vita.core.CommonResult;
+import com.vita.core.CommonStreamResult;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -13,6 +17,8 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+
+import java.io.IOException;
 
 /**
  * @BelongsProject: be-vita
@@ -86,10 +92,16 @@ public class ControllerExceptionHandler {
      */
     @ExceptionHandler(value = ServiceException.class)
     @ResponseBody
-    public CommonResult validExceptionHandler(ServiceException e) {
+    public ResponseEntity<?> validExceptionHandler(ServiceException e, HttpServletRequest request,
+                                                           HttpServletResponse response) throws IOException {
         String resolvedMessage = resolveServiceMessage(e);
         LOG.warn("业务异常：{}" , resolvedMessage);
-        return CommonResult.error(e.getCode(), resolvedMessage);
+        if (CommonStreamResult.isStreamRequest(request)) {
+            int status = e.getCode();
+            return CommonStreamResult.error(response, status >= 400 && status <= 599 ? status : 500,
+                    resolvedMessage);
+        }
+        return ResponseEntity.ok(CommonResult.error(e.getCode(), resolvedMessage));
     }
 
     /**

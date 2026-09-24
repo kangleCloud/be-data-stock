@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class MarketSnapshotStreamService implements MessageListener {
     private final Set<Client> clients = ConcurrentHashMap.newKeySet();
     private final Object broadcastLock = new Object();
 
+    @Autowired
     public MarketSnapshotStreamService(MarketSnapshotService snapshotService) {
         this(snapshotService, Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "market-snapshot-heartbeat");
