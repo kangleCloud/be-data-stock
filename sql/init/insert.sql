@@ -425,36 +425,5 @@ VALUES (7101, 0, 'DEPT_LEADER', '部门负责人', 'DEPARTMENT_LEADER',
         'deptId', 1, '2026-07-23 00:00:00', '2026-07-23 00:00:00', 0,
         1, 'system', 1, 'system', 0, '平台内置受控办理人规则');
 
--- 市场快照 V1 总览；初始化库与 20260923 增量升级保持同一菜单和权限契约。
-INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `route_name`, `route_link`,
-    `component_path`, `icon`, `sort_no`, `visible`, `is_cache`, `always_show`, `is_external`,
-    `status`, `is_system`, `is_deleted`, `tenant_id`, `create_time`, `create_by_id`, `create_by`,
-    `update_time`, `update_by_id`, `update_by`, `version`, `remark`)
-VALUES (1100, 0, 'A股行情', 'CONTENTS', 'Market', '/market', 'MarketLayout', 'trendCharts',
-    20, 1, 0, 1, 0, 1, 1, 0, 0, NOW(), 1, 'system', NOW(), 1, 'system', 0, 'AKShare 市场快照 V1'),
-    (1101, 1100, '大盘与板块总览', 'MENU', 'MarketOverview', '/market/overview',
-    'market/overview/index', 'dataAnalysis', 21, 1, 0, 0, 0, 1, 1, 0, 0,
-    NOW(), 1, 'system', NOW(), 1, 'system', 0, '仅展示热力图、板块 Top5 和大盘资金流');
-
-INSERT INTO `sys_permission` (`id`, `permission_name`, `permission_code`, `permission_type`,
-    `menu_id`, `api_method`, `api_path`, `auth_tag`, `sort_no`, `status`, `is_system`,
-    `is_deleted`, `tenant_id`, `create_time`, `create_by_id`, `create_by`,
-    `update_time`, `update_by_id`, `update_by`, `version`, `remark`)
-VALUES (2100, '行情总览查看', 'market:dashboard:view', 'MENU_ACTION', 1101, 'GET',
-    '/market/dashboard/snapshot', 'market:dashboard:view', 21, 1, 1, 0, 0,
-    NOW(), 1, 'system', NOW(), 1, 'system', 0, 'AKShare 市场快照 V1 只读权限');
-
-INSERT INTO `sys_role_menu` (`id`, `role_id`, `menu_id`, `is_deleted`, `tenant_id`,
-    `create_time`, `create_by_id`, `create_by`, `update_time`, `update_by_id`, `update_by`, `version`)
-VALUES (4100, 1, 1100, 0, 0, NOW(), 1, 'system', NOW(), 1, 'system', 0),
-    (4101, 1, 1101, 0, 0, NOW(), 1, 'system', NOW(), 1, 'system', 0),
-    (4102, 2, 1100, 0, 0, NOW(), 1, 'system', NOW(), 1, 'system', 0),
-    (4103, 2, 1101, 0, 0, NOW(), 1, 'system', NOW(), 1, 'system', 0);
-
-INSERT INTO `sys_role_permission` (`id`, `role_id`, `permission_id`, `is_deleted`, `tenant_id`,
-    `create_time`, `create_by_id`, `create_by`, `update_time`, `update_by_id`, `update_by`, `version`)
-VALUES (5100, 1, 2100, 0, 0, NOW(), 1, 'system', NOW(), 1, 'system', 0),
-    (5101, 2, 2100, 0, 0, NOW(), 1, 'system', NOW(), 1, 'system', 0);
-
 SET
 FOREIGN_KEY_CHECKS = 1;

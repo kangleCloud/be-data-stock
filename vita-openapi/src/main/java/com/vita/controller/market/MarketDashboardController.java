@@ -1,6 +1,5 @@
 package com.vita.controller.market;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.vita.core.CommonResult;
 import com.vita.core.CommonStreamResult;
@@ -30,14 +29,12 @@ public class MarketDashboardController {
     }
 
     @GetMapping("/snapshot")
-    @SaCheckPermission("market:dashboard:view")
     public CommonResult<JsonNode> getSnapshot() {
         return CommonResult.success(marketSnapshotService.getSnapshot());
     }
 
     @GetMapping("/stream")
     @StreamEndpoint
-    @SaCheckPermission("market:dashboard:view")
     public ResponseEntity<SseEmitter> stream() {
         SseEmitter emitter = streamService.open();
         return CommonStreamResult.success(emitter);

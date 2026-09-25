@@ -18,9 +18,9 @@ import java.util.Set;
 @Service
 public class MarketSnapshotServiceImpl implements MarketSnapshotService {
 
-    private static final String SNAPSHOT_KEY = "stock:market:v2:snapshot";
+    private static final String SNAPSHOT_KEY = "stock:market:v1:snapshot";
     private static final List<String> MODULE_NAMES = List.of(
-            "industryHeatmap", "conceptHeatmap", "industryTop5", "conceptTop5", "marketFundFlow");
+            "industryTop5", "conceptTop5", "marketFundFlow");
     private static final Set<String> STATUSES = Set.of("FRESH", "STALE", "ERROR");
     private static final Set<String> DATE_BASES = Set.of("CALENDAR", "SOURCE");
     private static final List<String> TOP_LIST_NAMES = List.of(
@@ -59,7 +59,7 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
         if (snapshot == null || !snapshot.isObject()
                 || !snapshot.path("schemaVersion").isIntegralNumber()
                 || !snapshot.path("schemaVersion").canConvertToInt()
-                || snapshot.path("schemaVersion").intValue() != 2
+                || snapshot.path("schemaVersion").intValue() != 1
                 || !"akshare".equals(snapshot.path("provider").textValue())
                 || !snapshot.path("generatedAt").isTextual()
                 || !snapshot.path("modules").isObject()) {
@@ -67,6 +67,9 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
         }
 
         JsonNode modules = snapshot.path("modules");
+        if (!hasExactlyFields(modules, Set.copyOf(MODULE_NAMES))) {
+            throw new IllegalArgumentException("市场快照模块集合不合法");
+        }
         for (String name : MODULE_NAMES) {
             JsonNode module = modules.path(name);
             if (!module.isObject() || !module.path("status").isTextual()
@@ -99,9 +102,6 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
     }
 
     private boolean validData(String name, JsonNode data) {
-        if (name.endsWith("Heatmap")) {
-            return data.isArray();
-        }
         if (name.endsWith("Top5")) {
             return validTop5Data(name, data);
         }

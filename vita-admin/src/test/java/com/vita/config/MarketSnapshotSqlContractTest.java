@@ -11,21 +11,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MarketSnapshotSqlContractTest {
 
     @Test
-    void initAndUpgradeExposeOnlySnapshotDashboard() throws IOException {
+    void newDatabaseHasNoAdminMarketMenuOrPermission() throws IOException {
         String init = read("sql/init/insert.sql");
-        String upgrade = read("sql/upgrade/20260923_market_dashboard_snapshot.sql");
+        assertThat(init).doesNotContain("MarketOverview", "market:dashboard:view",
+                "'/market/dashboard/snapshot'");
+    }
 
-        for (String sql : new String[]{init, upgrade}) {
-            assertThat(sql).contains("'Market', '/market'", "'MarketOverview', '/market/overview'",
-                    "'market/overview/index'", "'market:dashboard:view'",
-                    "'/market/dashboard/snapshot'");
-            assertThat(sql).doesNotContain("'MarketStockMonitor'", "'market:stock:manage'",
-                    "'market:stock:sync'");
-        }
-        assertThat(upgrade).contains("WHERE @market_menu_id IS NULL",
-                "WHERE @market_overview_id IS NULL", "WHERE @market_permission_id IS NULL",
-                "NOT EXISTS (SELECT 1 FROM `sys_role_menu`",
-                "NOT EXISTS (SELECT 1 FROM `sys_role_permission`");
+    @Test
+    void existingDatabaseCleanupTargetsOldPermissionAndMenuRelations() throws IOException {
+        String cleanup = read("sql/upgrade/20260925_remove_admin_market_dashboard.sql");
+        assertThat(cleanup).contains("'market:dashboard:view'",
+                "'MarketOverview'", "'Market'", "`sys_role_permission`",
+                "`sys_role_menu`", "@market_root_children = 0");
+        assertThat(cleanup).doesNotContain("DROP TABLE", "TRUNCATE");
     }
 
     private String read(String relativePath) throws IOException {

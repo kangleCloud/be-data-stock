@@ -1,4 +1,6 @@
-package com.vita.market.service;
+package com.vita.config.market;
+
+import com.vita.market.service.MarketSnapshotStreamService;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,7 +17,7 @@ public class MarketSnapshotStreamConfiguration {
             RedisConnectionFactory connectionFactory, MarketSnapshotStreamService streamService) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
-        container.addMessageListener(streamService, new ChannelTopic("stock:market:v2:updates"));
+        container.addMessageListener(streamService, new ChannelTopic("stock:market:v1:updates"));
         return container;
     }
 }

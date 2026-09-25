@@ -784,3 +784,7 @@ Sa-Token 注解鉴权在路由登录校验前执行。`SaTokenExceptionHandler` 
 ## 16. 原始设计依据
 
 本文基于用户提供的《管理后台用户登录》文档进行完善与优化，原始内容包含设计原则、认证流程、`sys_user`、`sys_login_log`、`sys_ip_block` 三张表结构，以及基础登录业务流程说明。fileciteturn0file0
+
+## 13.2 公开市场快照认证边界
+
+`vita-openapi/src/main/resources/application.yml` 仅将 `/market/dashboard/snapshot` 与 `/market/dashboard/stream` 两个精确路径加入该应用的 `vita.auth.extra-exclude-paths`。两者仅提供 GET，对外路径以 `/openapi/api` 为上下文前缀。其他 OpenAPI 路径继续由 `SaTokenConfigure` 登录拦截器校验；`vita-admin` 的排除列表不包含市场快照路径，也不再注册市场快照 Controller。不得通过通配符放行 `/market/**` 或将这两个路径加入共享应用配置。
