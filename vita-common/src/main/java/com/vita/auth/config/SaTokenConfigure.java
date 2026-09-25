@@ -41,7 +41,9 @@ public class SaTokenConfigure implements WebMvcConfigurer {
     private StpLogic stpLogic;
 
     /**
-     * CORS 跨域处理策略
+     * 创建 Sa-Token 的跨域处理策略，并放行浏览器预检请求。
+     *
+     * @return 跨域处理策略
      */
     @Bean
     public SaCorsHandleFunction corsHandle() {
@@ -64,9 +66,13 @@ public class SaTokenConfigure implements WebMvcConfigurer {
     }
 
     /**
-     * sa-token 拦截器
+     * 注册请求追踪和登录校验拦截器。
+     * <p>
+     * 登录校验使用当前应用注册的 {@link StpLogic}：App 模块使用 app 账号域，
+     * 管理端使用默认 login 账号域，避免 App 请求落入 {@code StpUtil} 的管理端账号域。
+     * 白名单路径跳过登录校验；异步和错误分派沿用首次请求的鉴权结果。
      *
-     * @param registry registry
+     * @param registry Spring MVC 拦截器注册表
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -75,15 +81,15 @@ public class SaTokenConfigure implements WebMvcConfigurer {
 
         List<String> excludePaths = new ArrayList<>(authProperty.getExtraExcludePaths());
         // 所有业务模块共用登录校验，模块专属授权规则由各模块自行追加。
-        registry.addInterceptor(new SaInterceptor(handle -> {
+        registry.addInterceptor(new RequestDispatchAuthInterceptor(new SaInterceptor(handle -> {
                     try {
-                        // 按当前启动模块注册的账号域校验，避免App请求误用管理端默认StpUtil。
+                        // 使用当前启动模块的账号域，避免 App 请求误用管理端默认 StpUtil。
                         stpLogic.checkLogin();
                     } catch (Exception e) {
                         throw new ServiceException(GlobalErrorCode.UNAUTHORIZED);
                     }
 
-                }))
+                })))
                 .addPathPatterns("/**")
                 .excludePathPatterns(excludePaths);
     }

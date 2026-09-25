@@ -18,11 +18,17 @@ import java.util.Set;
 @Service
 public class MarketSnapshotServiceImpl implements MarketSnapshotService {
 
-    private static final String SNAPSHOT_KEY = "stock:market:v1:snapshot";
+    private static final String SNAPSHOT_KEY = "stock:market:v2:snapshot";
     private static final List<String> MODULE_NAMES = List.of(
             "industryHeatmap", "conceptHeatmap", "industryTop5", "conceptTop5", "marketFundFlow");
     private static final Set<String> STATUSES = Set.of("FRESH", "STALE", "ERROR");
     private static final Set<String> DATE_BASES = Set.of("CALENDAR", "SOURCE");
+    private static final List<String> TOP_LIST_NAMES = List.of(
+            "topRise", "topFall", "topInflow", "topOutflow");
+    private static final Set<String> TOP_DATA_FIELDS = Set.of(
+            "source", "period", "topRise", "topFall", "topInflow", "topOutflow");
+    private static final Set<String> TOP_ITEM_FIELDS = Set.of(
+            "sectorName", "sectorType", "changePercent", "netFlowAmount");
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -52,7 +58,8 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
     private void validate(JsonNode snapshot) {
         if (snapshot == null || !snapshot.isObject()
                 || !snapshot.path("schemaVersion").isIntegralNumber()
-                || snapshot.path("schemaVersion").intValue() != 1
+                || !snapshot.path("schemaVersion").canConvertToInt()
+                || snapshot.path("schemaVersion").intValue() != 2
                 || !"akshare".equals(snapshot.path("provider").textValue())
                 || !snapshot.path("generatedAt").isTextual()
                 || !snapshot.path("modules").isObject()) {
@@ -81,6 +88,10 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
                     || !module.path("lastSuccessAt").isTextual()) {
                 throw new IllegalArgumentException("成功模块缺少数据或时间: " + name);
             }
+            if (name.endsWith("Top5") && !data.isNull()
+                    && !"CALENDAR".equals(module.path("tradeDateBasis").textValue())) {
+                throw new IllegalArgumentException("板块榜单日期基准不合法: " + name);
+            }
             if (!data.isNull() && !validData(name, data)) {
                 throw new IllegalArgumentException("市场快照模块数据不合法: " + name);
             }
@@ -92,15 +103,42 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
             return data.isArray();
         }
         if (name.endsWith("Top5")) {
-            return data.isObject() && data.path("topRise").isArray()
-                    && data.path("topFall").isArray() && data.path("topInflow").isArray()
-                    && data.path("topOutflow").isArray()
-                    && data.path("topRise").size() <= 5 && data.path("topFall").size() <= 5
-                    && data.path("topInflow").size() <= 5 && data.path("topOutflow").size() <= 5
-                    && data.path("unmatchedFundRows").isIntegralNumber();
+            return validTop5Data(name, data);
         }
         return data.isObject() && data.path("latest").isObject()
                 && data.path("series").isArray() && data.path("series").size() <= 20;
+    }
+
+    private boolean validTop5Data(String moduleName, JsonNode data) {
+        if (!data.isObject() || !hasExactlyFields(data, TOP_DATA_FIELDS)
+                || !"THS".equals(data.path("source").textValue())
+                || !"INTRADAY".equals(data.path("period").textValue())) {
+            return false;
+        }
+        String sectorType = moduleName.startsWith("industry") ? "industry" : "concept";
+        for (String listName : TOP_LIST_NAMES) {
+            JsonNode list = data.path(listName);
+            if (!list.isArray() || list.size() > 5) {
+                return false;
+            }
+            for (JsonNode item : list) {
+                if (!item.isObject() || !hasExactlyFields(item, TOP_ITEM_FIELDS)
+                        || !item.path("sectorName").isTextual()
+                        || item.path("sectorName").textValue().isBlank()
+                        || !sectorType.equals(item.path("sectorType").textValue())
+                        || !item.path("changePercent").isNumber()
+                        || !item.path("netFlowAmount").isNumber()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean hasExactlyFields(JsonNode object, Set<String> expectedFields) {
+        Set<String> actualFields = new java.util.HashSet<>();
+        object.fieldNames().forEachRemaining(actualFields::add);
+        return actualFields.equals(expectedFields);
     }
 
     private boolean isNullableText(JsonNode object, String field) {

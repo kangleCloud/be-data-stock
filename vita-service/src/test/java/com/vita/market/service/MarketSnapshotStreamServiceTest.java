@@ -39,7 +39,7 @@ class MarketSnapshotStreamServiceTest {
 
     @Test
     void oneNotificationReadsOnceAndBroadcastsToTwoClients() throws Exception {
-        when(snapshotService.getSnapshot()).thenReturn(new ObjectMapper().readTree("{\"schemaVersion\":1}"));
+        when(snapshotService.getSnapshot()).thenReturn(new ObjectMapper().readTree("{\"schemaVersion\":2}"));
         when(scheduler.scheduleAtFixedRate(any(Runnable.class), eq(15L), eq(15L), eq(TimeUnit.SECONDS)))
                 .thenReturn(mock(ScheduledFuture.class));
         when(scheduler.schedule(any(Runnable.class), eq(60000L), eq(TimeUnit.MILLISECONDS)))
@@ -63,7 +63,7 @@ class MarketSnapshotStreamServiceTest {
     }
     @Test
     void invalidSnapshotAfterNotificationClosesOnlyStreamResources() throws Exception {
-        when(snapshotService.getSnapshot()).thenReturn(new ObjectMapper().readTree("{\"schemaVersion\":1}"))
+        when(snapshotService.getSnapshot()).thenReturn(new ObjectMapper().readTree("{\"schemaVersion\":2}"))
                 .thenThrow(new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE));
         ScheduledFuture<?> heartbeat = mock(ScheduledFuture.class);
         ScheduledFuture<?> expiry = mock(ScheduledFuture.class);

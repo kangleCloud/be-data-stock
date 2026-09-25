@@ -37,12 +37,12 @@ class MarketSnapshotControllerContractTest {
 
         MarketSnapshotService service = mock(MarketSnapshotService.class);
         when(service.getSnapshot()).thenReturn(new ObjectMapper().readTree(
-                "{\"schemaVersion\":1,\"modules\":{\"marketFundFlow\":{\"tradeDate\":\"2026-09-22\"}}}"));
+                "{\"schemaVersion\":2,\"modules\":{\"marketFundFlow\":{\"tradeDate\":\"2026-09-22\"}}}"));
         MockMvcBuilders.standaloneSetup(new MarketDashboardController(service, mock(MarketSnapshotStreamService.class))).build()
                 .perform(get("/market/dashboard/snapshot").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.content.schemaVersion").value(1))
+                .andExpect(jsonPath("$.content.schemaVersion").value(2))
                 .andExpect(jsonPath("$.content.modules.marketFundFlow.tradeDate")
                         .value("2026-09-22"));
     }
@@ -56,7 +56,7 @@ class MarketSnapshotControllerContractTest {
 
         MarketSnapshotService service = mock(MarketSnapshotService.class);
         when(service.getSnapshot()).thenReturn(new ObjectMapper().readTree(
-                "{\"schemaVersion\":1,\"modules\":{}}"));
+                "{\"schemaVersion\":2,\"modules\":{}}"));
         MarketSnapshotStreamService streamService = new MarketSnapshotStreamService(service);
         try {
             MvcResult result = MockMvcBuilders.standaloneSetup(
@@ -70,7 +70,7 @@ class MarketSnapshotControllerContractTest {
             assertThat(result.getResponse().getHeader("Cache-Control")).contains("no-store");
             assertThat(result.getResponse().getContentAsString())
                     .contains("event:snapshot")
-                    .contains("data:{\"schemaVersion\":1,\"modules\":{}}");
+                    .contains("data:{\"schemaVersion\":2,\"modules\":{}}");
         } finally {
             streamService.shutdown();
         }
