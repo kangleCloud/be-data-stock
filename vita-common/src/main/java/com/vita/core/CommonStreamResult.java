@@ -13,7 +13,13 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 
 /**
- * 流接口响应约定：成功时返回 SSE，握手失败时保留 CommonResult 业务错误体及真实 HTTP 状态。
+ *
+ * @BelongsProject: be-vita
+ * @BelongsPackage: com.vita.core
+ * @Author: znk
+ * @CreateTime: 2026-09-24  21:44:32
+ * @Description: 流接口响应约定：成功时返回 SSE，握手失败时保留 CommonResult 业务错误体及真实 HTTP 状态。
+ * @Version: 1.0
  */
 public final class CommonStreamResult {
 

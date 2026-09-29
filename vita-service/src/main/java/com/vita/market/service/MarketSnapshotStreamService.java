@@ -48,7 +48,7 @@ public class MarketSnapshotStreamService implements MessageListener {
         synchronized (broadcastLock) {
             // 与通知读取串行化：建流校验和首帧之间不能漏掉更新。
             JsonNode snapshot = snapshotService.getSnapshot();
-            SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
+            SseEmitter emitter = createEmitter();
             Client client = new Client(emitter);
             emitter.onCompletion(() -> close(client, false));
             emitter.onTimeout(() -> close(client, true));
@@ -101,8 +101,8 @@ public class MarketSnapshotStreamService implements MessageListener {
             try {
                 client.emitter.send(SseEmitter.event().name("snapshot").data(snapshot.toString()));
             } catch (IOException | IllegalStateException exception) {
-                LOG.warn("行情快照流写入失败", exception);
-                close(client, true);
+                LOG.debug("行情快照流写入失败，关闭连接", exception);
+                close(client, false);
             }
         }
     }
@@ -115,8 +115,8 @@ public class MarketSnapshotStreamService implements MessageListener {
             try {
                 client.emitter.send(SseEmitter.event().comment("heartbeat"));
             } catch (IOException | IllegalStateException exception) {
-                LOG.warn("行情快照流心跳写入失败", exception);
-                close(client, true);
+                LOG.debug("行情快照流心跳写入失败，关闭连接", exception);
+                close(client, false);
             }
         }
     }
@@ -134,9 +134,18 @@ public class MarketSnapshotStreamService implements MessageListener {
                 client.expiry.cancel(false);
             }
             if (complete) {
-                client.emitter.complete();
+                try {
+                    client.emitter.complete();
+                } catch (Exception exception) {
+                    // 连接已断开时 complete 仍可能触发响应刷新异常；资源已清理，无需再交给 MVC 写响应。
+                    LOG.debug("行情快照流已断开，完成响应失败", exception);
+                }
             }
         }
+    }
+
+    SseEmitter createEmitter() {
+        return new SseEmitter(STREAM_TIMEOUT_MS);
     }
 
     int activeClientCount() {

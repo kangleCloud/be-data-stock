@@ -8,6 +8,7 @@ import cn.dev33.satoken.spring.SaTokenContextRegister;
 import cn.dev33.satoken.stp.StpInterface;
 import cn.dev33.satoken.stp.StpUtil;
 import com.vita.auth.config.SaTokenConfigure;
+import com.vita.auth.config.SaTokenSharedConfiguration;
 import com.vita.auth.constant.AuthConstants;
 import com.vita.auth.handler.SaTokenExceptionHandler;
 import com.vita.auth.property.AuthProperty;
@@ -29,6 +30,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestExecutionListeners;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.context.support.DependencyInjectionTestExecutionListener;
 import org.springframework.test.context.support.DirtiesContextBeforeModesTestExecutionListener;
@@ -64,6 +66,7 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppC
         classes = WorkflowRouteSecurityTest.RouteTestConfiguration.class,
         initializers = ConfigDataApplicationContextInitializer.class
 )
+@TestPropertySource(properties = "vita.workflow.enabled=true")
 @TestExecutionListeners(
         listeners = {
                 ServletTestExecutionListener.class,
@@ -348,6 +351,7 @@ class WorkflowRouteSecurityTest {
     @EnableConfigurationProperties(AuthProperty.class)
     @Import({
             SaTokenConfigure.class,
+            SaTokenSharedConfiguration.class,
             SaBeanRegister.class,
             SaBeanInject.class,
             SaTokenContextRegister.class,

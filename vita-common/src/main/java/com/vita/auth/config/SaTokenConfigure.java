@@ -10,6 +10,8 @@ import com.vita.core.exception.GlobalErrorCode;
 import com.vita.core.exception.ServiceException;
 import com.vita.log.interceptor.RequestTraceInterceptor;
 import jakarta.annotation.Resource;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,6 +41,9 @@ public class SaTokenConfigure implements WebMvcConfigurer {
 
     @Resource
     private StpLogic stpLogic;
+
+    @Autowired
+    private ObjectProvider<AuthExcludePathsProvider> authExcludePathsProviders;
 
     /**
      * 创建 Sa-Token 的跨域处理策略，并放行浏览器预检请求。
@@ -80,6 +85,7 @@ public class SaTokenConfigure implements WebMvcConfigurer {
                 .addPathPatterns("/**");
 
         List<String> excludePaths = new ArrayList<>(authProperty.getExtraExcludePaths());
+        authExcludePathsProviders.orderedStream().forEach(provider -> excludePaths.addAll(provider.paths()));
         // 所有业务模块共用登录校验，模块专属授权规则由各模块自行追加。
         registry.addInterceptor(new RequestDispatchAuthInterceptor(new SaInterceptor(handle -> {
                     try {

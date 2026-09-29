@@ -17,6 +17,73 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- 个股监控 V1：字典来自交易所，配置和有限资料为系统级；报价及曲线仅存 Redis。
+DROP TABLE IF EXISTS `stock_symbol_dictionary`;
+CREATE TABLE `stock_symbol_dictionary` (
+    `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+    `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
+    `symbol` varchar(16) NOT NULL COMMENT '交易所前缀股票标识',
+    `code` varchar(12) NOT NULL COMMENT '股票代码',
+    `name` varchar(100) NOT NULL COMMENT '股票名称',
+    `market` varchar(2) NOT NULL COMMENT 'SH/SZ/BJ',
+    `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `is_deleted` tinyint(1) DEFAULT 0 COMMENT '逻辑删除',
+    `create_by_id` bigint DEFAULT NULL COMMENT '创建人ID',
+    `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
+    `update_by_id` bigint DEFAULT NULL COMMENT '更新人ID',
+    `update_by` varchar(50) DEFAULT NULL COMMENT '更新人',
+    `version` bigint DEFAULT 0 COMMENT '版本号',
+    `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_stock_symbol_dictionary_symbol` (`symbol`),
+    KEY `idx_stock_symbol_dictionary_code` (`code`),
+    KEY `idx_stock_symbol_dictionary_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易所股票字典';
+
+DROP TABLE IF EXISTS `stock_monitor_config`;
+CREATE TABLE `stock_monitor_config` (
+    `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+    `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
+    `symbol` varchar(16) NOT NULL COMMENT '股票标识',
+    `enabled` tinyint(1) NOT NULL DEFAULT 0 COMMENT '监控启用状态',
+    `sort_order` int NOT NULL DEFAULT 0 COMMENT '显示顺序',
+    `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `is_deleted` tinyint(1) DEFAULT 0 COMMENT '逻辑删除',
+    `create_by_id` bigint DEFAULT NULL COMMENT '创建人ID',
+    `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
+    `update_by_id` bigint DEFAULT NULL COMMENT '更新人ID',
+    `update_by` varchar(50) DEFAULT NULL COMMENT '更新人',
+    `version` bigint DEFAULT 0 COMMENT '版本号',
+    `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_stock_monitor_config_symbol` (`symbol`),
+    KEY `idx_stock_monitor_config_enabled_sort` (`enabled`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='系统级个股监控配置';
+
+DROP TABLE IF EXISTS `stock_monitor_profile`;
+CREATE TABLE `stock_monitor_profile` (
+    `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+    `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
+    `symbol` varchar(16) NOT NULL COMMENT '股票标识',
+    `industry` varchar(100) DEFAULT NULL COMMENT '所属行业',
+    `listing_date` varchar(10) DEFAULT NULL COMMENT '上市日期 YYYY-MM-DD',
+    `market_cap` decimal(22,2) DEFAULT NULL COMMENT '总市值 元',
+    `profile_updated_at` varchar(35) DEFAULT NULL COMMENT '资料更新时间 带时区偏移 ISO 8601',
+    `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `is_deleted` tinyint(1) DEFAULT 0 COMMENT '逻辑删除',
+    `create_by_id` bigint DEFAULT NULL COMMENT '创建人ID',
+    `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
+    `update_by_id` bigint DEFAULT NULL COMMENT '更新人ID',
+    `update_by` varchar(50) DEFAULT NULL COMMENT '更新人',
+    `version` bigint DEFAULT 0 COMMENT '版本号',
+    `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_stock_monitor_profile_symbol` (`symbol`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='选中个股雪球有限基础资料';
+
 -- ----------------------------
 -- Table structure for sys_oper_log
 -- ----------------------------

@@ -5,6 +5,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
@@ -13,11 +15,13 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
  * @BelongsPackage: com.vita.config
  * @Author: znk
  * @CreateTime: 2026-03-02
- * @Description: vita admin 项目启动类
+ * @Description: vita scheduler 项目启动类
  * @Version: 1.0
  */
-@SpringBootApplication(
-        scanBasePackages = "com.vita")
+// 定时服务不加载 App 登录与 OAuth 服务；这些服务依赖仅在 App 端启用的验证码配置。
+@SpringBootApplication
+@ComponentScan(basePackages = "com.vita", excludeFilters = @ComponentScan.Filter(
+        type = FilterType.REGEX, pattern = "com\\.vita\\.app\\..*"))
 @MapperScan("com.vita.**.mapper")
 @EnableTransactionManagement
 public class VitaSchedulerApplication {

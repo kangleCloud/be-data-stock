@@ -1,0 +1,6 @@
+# 将此段合并到 admin、scheduler、openapi 的 application-prod.yml；部署时提供地址和令牌。
+vita:
+  stock-monitor:
+    python-base-url: ${STOCK_MONITOR_PYTHON_BASE_URL:}
+    internal-token: ${STOCK_MONITOR_INTERNAL_TOKEN:}
+    xq-enabled: ${STOCK_MONITOR_XQ_ENABLED:false}

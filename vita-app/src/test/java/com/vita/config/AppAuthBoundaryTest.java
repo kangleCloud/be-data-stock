@@ -1,6 +1,8 @@
 package com.vita.config;
 
+import com.vita.app.auth.dto.AppLoginDto;
 import com.vita.controller.auth.AppAuthController;
+import com.vita.repeat.annotation.RepeatSubmit;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -82,6 +84,12 @@ class AppAuthBoundaryTest {
         assertThat(prodYaml).doesNotContain("${VITA_");
         assertThat(devYaml).contains("enabled: false", "client-id:", "client-secret:", "callback-uri:");
         assertThat(prodYaml).contains("enabled: false", "client-id:", "client-secret:", "callback-uri:");
+    }
+
+    @Test
+    void loginShouldNotUseRepeatSubmitWindow() throws NoSuchMethodException {
+        Method login = AppAuthController.class.getMethod("login", AppLoginDto.class);
+        assertThat(login.getAnnotation(RepeatSubmit.class)).isNull();
     }
 
     @Test

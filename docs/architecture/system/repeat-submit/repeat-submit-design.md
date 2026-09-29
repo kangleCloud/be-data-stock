@@ -28,6 +28,8 @@ public CommonResult<Long> create(@RequestBody @Valid XxxCreateDto dto) {
 
 查询接口默认不标注。
 
+用户名密码登录接口也不使用该固定时间窗。验证码本身一次性使用，认证失败后应允许用户立即获取新验证码并重试；登录防刷由验证码和认证风控负责，前端在请求进行中阻止并发提交。
+
 ## 判重规则
 
 Redis key：

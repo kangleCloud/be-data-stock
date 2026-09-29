@@ -59,7 +59,19 @@ VALUES (1000, 0, '系统管理', 'CONTENTS', 'System', '/system', 'Layout', 'set
        (1003, 1000, '菜单管理', 'MENU', 'SysMenu', '/system/sysMenu', 'system/sysMenu/index', 'menu',
         13, 1, 0, 0, 0, 1, 1,
         0, 0, '2026-04-02 00:00:00', 1, 'system', '2026-04-02 00:00:00',
-        1, 'system', 0, '菜单管理目录');
+        1, 'system', 0, '菜单管理目录'),
+       (1004, 1000, '个股监控', 'MENU', 'StockMonitor', '/system/stockMonitor', 'system/stockMonitor/index', 'monitor',
+        14, 1, 0, 0, 0, 1, 1,
+        0, 0, '2026-09-29 00:00:00', 1, 'system', '2026-09-29 00:00:00',
+        1, 'system', 0, '系统级个股监控配置'),
+       (1005, 1000, '股票字典', 'MENU', 'StockDictionary', '/system/stockDictionary', 'system/stockDictionary/index', 'list',
+        15, 1, 0, 0, 0, 1, 1,
+        0, 0, '2026-09-29 00:00:00', 1, 'system', '2026-09-29 00:00:00',
+        1, 'system', 0, '交易所股票字典'),
+       (1006, 1000, '股票资料', 'MENU', 'StockProfile', '/system/stockProfile', 'system/stockProfile/index', 'document',
+        16, 1, 0, 0, 0, 1, 1,
+        0, 0, '2026-09-29 00:00:00', 1, 'system', '2026-09-29 00:00:00',
+        1, 'system', 0, '已同步的股票基础资料');
 
 -- ----------------------------
 -- Records of sys_permission
@@ -236,7 +248,31 @@ VALUES (2001, '用户管理查看', 'system:user:view', 'MENU_ACTION', 1001, NUL
        (2044, '工作流任务管理', 'system:workflow:task:manage', 'MENU_ACTION', NULL, 'POST',
         '/system/workflow/tasks/**', 'system:workflow:task:manage', 113, 1, 1, 0, 0,
         '2026-07-23 00:00:00', 1, 'system', '2026-07-23 00:00:00', 1, 'system',
-        0, '修改运行中任务办理人');
+        0, '修改运行中任务办理人'),
+       (2045, '个股监控查看', 'system:stock-monitor:view', 'MENU_ACTION', 1004, 'GET',
+        '/system/stockMonitor/**', 'system:stock-monitor:view', 114, 1, 1, 0, 0,
+        '2026-09-28 00:00:00', 1, 'system', '2026-09-28 00:00:00', 1, 'system',
+        0, '查看系统级个股监控配置'),
+       (2046, '个股监控修改', 'system:stock-monitor:update', 'MENU_ACTION', 1004, 'POST',
+        '/system/stockMonitor/**', 'system:stock-monitor:update', 115, 1, 1, 0, 0,
+        '2026-09-28 00:00:00', 1, 'system', '2026-09-28 00:00:00', 1, 'system',
+        0, '启停和排序个股监控清单'),
+       (2047, '个股监控刷新', 'system:stock-monitor:refresh', 'MENU_ACTION', 1004, 'POST',
+        '/system/stockMonitor/refresh', 'system:stock-monitor:refresh', 116, 1, 1, 0, 0,
+        '2026-09-28 00:00:00', 1, 'system', '2026-09-28 00:00:00', 1, 'system',
+        0, '触发交易所字典及允许时的雪球资料刷新'),
+       (2048, '股票字典查看', 'system:stock-dictionary:view', 'MENU_ACTION', 1005, 'GET',
+        '/system/stockDictionary/page', 'system:stock-dictionary:view', 117, 1, 1, 0, 0,
+        '2026-09-29 00:00:00', 1, 'system', '2026-09-29 00:00:00', 1, 'system',
+        0, '分页查询交易所股票字典'),
+       (2049, '股票资料查看', 'system:stock-profile:view', 'MENU_ACTION', 1006, 'GET',
+        '/system/stockProfile/page', 'system:stock-profile:view', 118, 1, 1, 0, 0,
+        '2026-09-29 00:00:00', 1, 'system', '2026-09-29 00:00:00', 1, 'system',
+        0, '分页查询已同步股票资料'),
+       (2050, '股票字典新增', 'system:stock-dictionary:add', 'MENU_ACTION', 1005, 'POST',
+        '/system/stockDictionary/add', 'system:stock-dictionary:add', 119, 1, 1, 0, 0,
+        '2026-09-29 00:00:00', 1, 'system', '2026-09-29 00:00:00', 1, 'system',
+        0, '手工补录一只交易所股票');
 
 -- ----------------------------
 -- Records of sys_user_role
@@ -269,7 +305,13 @@ VALUES (4001, 1, 1000, 0, 0, '2026-04-02 00:00:00', 1,
        (4007, 2, 1002, 0, 0, '2026-04-02 00:00:00', 1,
         'system', '2026-04-02 00:00:00', 1, 'system', 0),
        (4008, 2, 1003, 0, 0, '2026-04-02 00:00:00', 1,
-        'system', '2026-04-02 00:00:00', 1, 'system', 0);
+        'system', '2026-04-02 00:00:00', 1, 'system', 0),
+       (4009, 1, 1004, 0, 0, '2026-09-29 00:00:00', 1,
+        'system', '2026-09-29 00:00:00', 1, 'system', 0),
+       (4010, 1, 1005, 0, 0, '2026-09-29 00:00:00', 1,
+        'system', '2026-09-29 00:00:00', 1, 'system', 0),
+       (4011, 1, 1006, 0, 0, '2026-09-29 00:00:00', 1,
+        'system', '2026-09-29 00:00:00', 1, 'system', 0);
 
 -- ----------------------------
 -- Records of sys_role_permission
@@ -394,7 +436,19 @@ VALUES (5001, 1, 2001, 0, 0, '2026-04-02 00:00:00',
        (5061, 1, 2044, 0, 0, '2026-07-23 00:00:00',
         1, 'system', '2026-07-23 00:00:00', 1, 'system', 0),
        (5062, 3, 2044, 0, 0, '2026-07-23 00:00:00',
-        1, 'system', '2026-07-23 00:00:00', 1, 'system', 0);
+        1, 'system', '2026-07-23 00:00:00', 1, 'system', 0),
+       (5063, 1, 2045, 0, 0, '2026-09-29 00:00:00',
+        1, 'system', '2026-09-29 00:00:00', 1, 'system', 0),
+       (5064, 1, 2046, 0, 0, '2026-09-29 00:00:00',
+        1, 'system', '2026-09-29 00:00:00', 1, 'system', 0),
+       (5065, 1, 2047, 0, 0, '2026-09-29 00:00:00',
+        1, 'system', '2026-09-29 00:00:00', 1, 'system', 0),
+       (5066, 1, 2048, 0, 0, '2026-09-29 00:00:00',
+        1, 'system', '2026-09-29 00:00:00', 1, 'system', 0),
+       (5067, 1, 2049, 0, 0, '2026-09-29 00:00:00',
+        1, 'system', '2026-09-29 00:00:00', 1, 'system', 0),
+       (5068, 1, 2050, 0, 0, '2026-09-29 00:00:00',
+        1, 'system', '2026-09-29 00:00:00', 1, 'system', 0);
 
 -- ----------------------------
 -- Records of workflow_category
