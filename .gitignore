@@ -38,9 +38,6 @@ application*.properties
 *credential*.yml
 *credential*.yaml
 
-# Local documentation containing access keys and signing secrets
-docs/architecture/starter/file/vita-file-starter-design.md
-docs/development/starter/file/vita-file-minio-aksk-guide.md
 
 # OS
 .DS_Store

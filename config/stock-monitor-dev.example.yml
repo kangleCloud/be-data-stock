@@ -1,0 +1,6 @@
+# 将此段合并到 admin、scheduler、openapi 的 application-dev.yml。
+vita:
+  stock-monitor:
+    python-base-url: ${STOCK_MONITOR_PYTHON_BASE_URL:http://127.0.0.1:8000}
+    internal-token: ${STOCK_MONITOR_INTERNAL_TOKEN:}
+    xq-enabled: ${STOCK_MONITOR_XQ_ENABLED:false}

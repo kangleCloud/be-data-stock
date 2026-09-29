@@ -71,6 +71,13 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             throw new ServiceException(GlobalErrorCode.BAD_REQUEST);
         }
         getRequiredEntity(updateDto.getId());
+        if (updateDto.getId() == 1L) {
+            updateDto.setDeptId(null);
+            updateDto.setUserName(null);
+            updateDto.setNickName(null);
+            updateDto.setPassword(null);
+            updateDto.setStatus(null);
+        }
         SysUser data = new SysUser();
         BeanUtils.copyProperties(updateDto, data);
         if (CharSequenceUtil.isBlank(updateDto.getPassword())) {
@@ -208,7 +215,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                     .likeIfPresent(SysUser::getMobile, searchDto.getMobile())
                     .eqIfPresent(SysUser::getStatus, searchDto.getStatus());
         }
-        queryWrapper.orderByDesc(SysUser::getId);
+        queryWrapper.orderByAsc(SysUser::getId);
         return queryWrapper;
     }
 

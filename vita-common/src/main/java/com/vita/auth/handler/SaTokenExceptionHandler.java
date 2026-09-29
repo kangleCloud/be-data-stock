@@ -5,13 +5,18 @@ import cn.dev33.satoken.exception.NotPermissionException;
 import cn.dev33.satoken.exception.NotRoleException;
 import cn.hutool.http.HttpStatus;
 import com.vita.core.CommonResult;
+import com.vita.core.CommonStreamResult;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.io.IOException;
 
 
 /**
@@ -36,10 +41,14 @@ public class SaTokenExceptionHandler {
      * @return 返回结果
      */
     @ExceptionHandler(NotPermissionException.class)
-    public CommonResult<Void> handleNotPermissionException(NotPermissionException e, HttpServletRequest request) {
+    public ResponseEntity<?> handleNotPermissionException(NotPermissionException e, HttpServletRequest request,
+                                                                 HttpServletResponse response) throws IOException {
         String requestURI = request.getRequestURI();
         LOG.error("请求地址'{}',权限码校验失败'{}'", requestURI, e.getMessage());
-        return CommonResult.error(HttpStatus.HTTP_FORBIDDEN, "没有访问权限，请联系管理员授权");
+        if (CommonStreamResult.isStreamRequest(request)) {
+            return CommonStreamResult.error(response, HttpStatus.HTTP_FORBIDDEN, "没有访问权限，请联系管理员授权");
+        }
+        return ResponseEntity.ok(CommonResult.error(HttpStatus.HTTP_FORBIDDEN, "没有访问权限，请联系管理员授权"));
     }
 
     /**
@@ -50,10 +59,14 @@ public class SaTokenExceptionHandler {
      * @return 返回结果
      */
     @ExceptionHandler(NotRoleException.class)
-    public CommonResult<Void> handleNotRoleException(NotRoleException e, HttpServletRequest request) {
+    public ResponseEntity<?> handleNotRoleException(NotRoleException e, HttpServletRequest request,
+                                                           HttpServletResponse response) throws IOException {
         String requestURI = request.getRequestURI();
         LOG.error("请求地址'{}',角色权限校验失败'{}'", requestURI, e.getMessage());
-        return CommonResult.error(HttpStatus.HTTP_FORBIDDEN, "没有访问权限，请联系管理员授权");
+        if (CommonStreamResult.isStreamRequest(request)) {
+            return CommonStreamResult.error(response, HttpStatus.HTTP_FORBIDDEN, "没有访问权限，请联系管理员授权");
+        }
+        return ResponseEntity.ok(CommonResult.error(HttpStatus.HTTP_FORBIDDEN, "没有访问权限，请联系管理员授权"));
     }
 
     /**
@@ -64,9 +77,13 @@ public class SaTokenExceptionHandler {
      * @return 返回结果
      */
     @ExceptionHandler(NotLoginException.class)
-    public CommonResult<Void> handleNotLoginException(NotLoginException e, HttpServletRequest request) {
+    public ResponseEntity<?> handleNotLoginException(NotLoginException e, HttpServletRequest request,
+                                                            HttpServletResponse response) throws IOException {
         String requestURI = request.getRequestURI();
         LOG.error("请求地址'{}',认证失败'{}',无法访问系统资源", requestURI, e.getMessage());
-        return CommonResult.error(HttpStatus.HTTP_UNAUTHORIZED, "认证失败，无法访问系统资源");
+        if (CommonStreamResult.isStreamRequest(request)) {
+            return CommonStreamResult.error(response, HttpStatus.HTTP_UNAUTHORIZED, "认证失败，无法访问系统资源");
+        }
+        return ResponseEntity.ok(CommonResult.error(HttpStatus.HTTP_UNAUTHORIZED, "认证失败，无法访问系统资源"));
     }
 }

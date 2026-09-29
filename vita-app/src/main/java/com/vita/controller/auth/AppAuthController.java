@@ -63,7 +63,6 @@ public class AppAuthController extends BaseController {
      * @param request 登录请求
      * @return App令牌
      */
-    @RepeatSubmit
     @PostMapping("/login")
     public CommonResult<AppAuthTokenVo> login(@RequestBody @Valid AppLoginDto request) {
         return CommonResult.success(authApplicationService.login(request));
