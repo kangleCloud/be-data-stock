@@ -79,7 +79,7 @@ class ApplicationWorkflowYamlTest {
 
         assertThat(integration.getProperty("vita.workflow.enabled")).isEqualTo(true);
         assertThat(integration.getProperty("vita.mysql.master.database"))
-                .isEqualTo("${VITA_WORKFLOW_IT_MYSQL_DATABASE:data_stock_workflow_it}");
+                .isEqualTo("data_stock_workflow_it");
         assertThat(integration.getProperty("spring.data.redis.database")).isEqualTo(14);
     }
 

@@ -2,9 +2,9 @@
 
 ## 范围与来源
 
-系统级监控清单最多启用 10 只股票。MySQL `stock_monitor_config.enabled` 是每只股票是否进入监控及采集清单的唯一配置；YAML 的 `STOCK_MONITOR_XQ_ENABLED` 仅是默认关闭的雪球授权总闸，不改变各股票的 `enabled`。MySQL 保存交易所股票字典、监控启停和排序、选中股票的有限基础资料；Redis DB 2 保存生效清单、雪球报价和当日真实采样曲线。交易所字典独立同步；选中股票资料、报价只来自雪球。总闸关闭时任何自动或手动整体刷新均不得请求雪球，匿名接口不得输出旧的雪球报价。授权未确认期间只用模拟雪球数据联调。
+系统级监控清单最多启用 10 只股票。MySQL `stock_monitor_config.enabled` 是每只股票是否进入监控及采集清单的唯一配置；YAML 的 `vita.stock-monitor.xq-enabled` 仅是默认关闭的雪球授权总闸，不改变各股票的 `enabled`。MySQL 保存交易所股票字典、监控启停和排序、选中股票的有限基础资料；Redis DB 2 保存生效清单、雪球报价和当日真实采样曲线。交易所字典独立同步；选中股票资料、报价只来自雪球。总闸关闭时任何自动或手动整体刷新均不得请求雪球，匿名接口不得输出旧的雪球报价。授权未确认期间只用模拟雪球数据联调。
 
-Spring Boot 的 admin、scheduler、openapi 启动模块在各自 `application-dev.yml`、`application-prod.yml` 中将 `STOCK_MONITOR_PYTHON_BASE_URL`、`STOCK_MONITOR_INTERNAL_TOKEN`、`STOCK_MONITOR_XQ_ENABLED` 映射到 `vita.stock-monitor.python-base-url`、`internal-token`、`xq-enabled`，再由 `StockMonitorProperty` 统一绑定。开发环境的 Python 地址默认 `http://127.0.0.1:8000`；生产地址和令牌由部署环境提供；雪球开关默认 `false`。`application*.yml` 为本机忽略配置，可跟踪脱敏模板见 `config/stock-monitor-dev.example.yml` 和 `config/stock-monitor-prod.example.yml`，不得在模板中填写真实令牌。
+Spring Boot 的 admin、scheduler、openapi 启动模块在各自 `application-dev.yml`、`application-prod.yml` 中直接填写 `vita.stock-monitor.python-base-url`、`internal-token`、`xq-enabled`，再由 `StockMonitorProperty` 统一绑定。开发环境的 Python 地址默认 `http://127.0.0.1:8000`；生产地址和令牌在部署机器的本机 YAML 中填写；生产雪球开关默认 `false`。`application-*.yml` 不使用环境变量占位符；`application*.yml` 为本机忽略配置，可跟踪脱敏模板见 `config/stock-monitor-dev.example.yml` 和 `config/stock-monitor-prod.example.yml`，不得在模板中填写真实令牌。
 
 股票标识统一为 `SH600000`、`SZ000001`、`BJ920262` 格式。时间戳为带 `+08:00` 偏移的 ISO 8601，交易日为 `YYYY-MM-DD`；金额和价格单位元，涨跌幅数值单位百分数，例如 `1.23` 表示上涨 1.23%。缺失数值返回 `null`，不得填 0。状态只使用 `DISABLED`、`FRESH`、`STALE`、`ERROR`。
 
@@ -74,14 +74,14 @@ Redis 的 enabled 键缺失、重复 symbol 或其他格式错误返回业务 50
 
 供服务器本机 `curl` 的两个独立手动入口为 `POST /scheduler/api/local/stock-monitor/v1/dictionary/refresh` 和 `POST /scheduler/api/local/stock-monitor/v1/profiles/refresh`，均无需登录和请求令牌，但只接受 TCP 直连来源 `127.0.0.1` 或 `::1`，携带 `Forwarded`、`X-Forwarded-For` 或 `X-Real-IP` 的请求会被拒绝；网关不得转发外部请求到这两个路径。字典入口只同步交易所并重建 Redis 清单，资料入口只同步当前已启用股票资料；资料总闸关闭时返回 503 且不访问雪球。两入口与定时刷新共用锁和状态，分别有 10 分钟、30 分钟的重触发间隔；缓存重建和资料落库还与管理端启停共用配置锁。现有带令牌整体刷新入口不变。Java 到 Python 的内部调用继续携带 `X-Internal-Token`。
 
-Java 调用 Python 内部端点（服务地址由 `STOCK_MONITOR_PYTHON_BASE_URL` 配置）：
+Java 调用 Python 内部端点（服务地址由 `vita.stock-monitor.python-base-url` 配置）：
 
 | 方法和路径 | 请求 | 响应 |
 | --- | --- | --- |
 | `POST /internal/stock-monitor/v1/exchange-dictionary` | `{}` | `{"schemaVersion":1,"stocks":[{"symbol":"SH600000","code":"600000","name":"浦发银行","market":"SH"}]}`；仅交易所清单，无雪球调用 |
 | `POST /internal/stock-monitor/v1/profiles` | `{"symbols":["SH600000"]}`，最多 10 条 | `{"schemaVersion":1,"profiles":[{"symbol":"SH600000","industry":null,"listingDate":null,"marketCap":null,"updatedAt":"2026-09-28T15:30:00+08:00"}]}`；仅雪球开关开启时调用 |
 
-Python 报价采集独立按照 Redis 契约写键。Java 整体刷新不直接采集报价；在开关关闭时 Python 自身的自动调度也必须停止雪球访问。内部请求头为 `X-Internal-Token`，双方通过 `STOCK_MONITOR_INTERNAL_TOKEN` 配置相同令牌；令牌不得出现在公开响应或日志。`profiles` 在 Python 开关关闭时也必须拒绝并保持零雪球请求。
+Python 报价采集独立按照 Redis 契约写键。Java 整体刷新不直接采集报价；在开关关闭时 Python 自身的自动调度也必须停止雪球访问。内部请求头为 `X-Internal-Token`，Java 在本机 YAML 的 `vita.stock-monitor.internal-token` 中填写与 Python 相同的令牌；令牌不得出现在公开响应或日志。`profiles` 在 Python 开关关闭时也必须拒绝并保持零雪球请求。
 
 ## MySQL 边界
 

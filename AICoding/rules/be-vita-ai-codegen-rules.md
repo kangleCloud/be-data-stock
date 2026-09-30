@@ -27,8 +27,8 @@
 ## 统一技术基线
 
 - Java 实现必须兼容 JDK 17 及仓库现有 Maven、Spring Boot 依赖基线，未经任务明确要求不得升级基础技术栈。
-- Spring Boot 业务配置必须由各启动模块 profile 配置文件映射到 `vita.*` 命名空间，再由领域级独立 `*Property` 类使用 `@ConfigurationProperties` 绑定；业务类不得直接以 `@Value("${ENV_NAME}")` 读取大写环境变量。
-- 敏感配置仅在 profile 文件中引用环境变量占位符，并提供不含真实凭据的可跟踪模板；`application*.yml` 按 `.gitignore` 保持本机配置，不强制纳入版本控制。缺失的个股监控令牌不得放开内部接口，雪球采集开关默认关闭。
+- Spring Boot 业务配置必须直接写在各启动模块 profile 配置文件的 `vita.*` 命名空间中，再由领域级独立 `*Property` 类使用 `@ConfigurationProperties` 绑定；业务类不得直接读取大写环境变量。
+- `application-*.yml` 不使用 `${ENV_VARIABLE}` 注入系统配置。敏感配置只在本机忽略的 profile 文件中填写实际值，并提供不含真实凭据的可跟踪模板；`application*.yml` 按 `.gitignore` 保持本机配置，不强制纳入版本控制。缺失的个股监控令牌不得放开内部接口，生产雪球采集开关默认关闭。
 - Web 返回体必须使用 `CommonResult<T>`。
 - 分页请求必须使用 `PageRequest`，分页响应必须使用 `PageResponse<T>`。
 - MyBatis-Plus 查询必须优先使用 `BaseMapperX` 与 `LambdaQueryWrapperX`。
