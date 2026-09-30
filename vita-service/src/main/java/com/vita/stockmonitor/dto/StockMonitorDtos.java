@@ -15,7 +15,10 @@ public final class StockMonitorDtos {
     }
 
     public record Quote(String source, String sourceTime, String collectedAt, String tradeDate,
-                        BigDecimal price, BigDecimal changePercent, BigDecimal amount, String status) {
+                        BigDecimal price, BigDecimal changePercent, BigDecimal amount,
+                        BigDecimal low, BigDecimal high, BigDecimal open, BigDecimal limitUp,
+                        BigDecimal limitDown, BigDecimal averagePrice, BigDecimal volume,
+                        BigDecimal previousClose, String status) {
     }
 
     public record SeriesPoint(String time, BigDecimal price) {

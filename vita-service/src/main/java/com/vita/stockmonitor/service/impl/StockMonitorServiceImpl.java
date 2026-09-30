@@ -318,9 +318,9 @@ public class StockMonitorServiceImpl implements StockMonitorService {
         for (int i = 0; i < enabled.size(); i++) {
             StockMonitorDtos.DictionaryItem item = enabled.get(i);
             StockMonitorDtos.Quote quote = xqEnabled ? readQuote(item.symbol(), tradeDate) : emptyQuote("DISABLED");
-            List<StockMonitorDtos.SeriesPoint> series = xqEnabled && tradeDate != null
+            List<StockMonitorDtos.SeriesPoint> series = xqEnabled && quote.tradeDate() != null
                     && !"ERROR".equals(quote.status())
-                    ? readSeries(tradeDate, item.symbol()) : List.of();
+                    ? readSeries(quote.tradeDate(), item.symbol()) : List.of();
             stocks.add(new StockMonitorDtos.Stock(item.symbol(), item.code(), item.name(), item.market(),
                     i + 1, profileView(profiles.get(item.symbol())), quote, series));
         }
@@ -376,12 +376,19 @@ public class StockMonitorServiceImpl implements StockMonitorService {
             if (date == null) {
                 return emptyQuote("ERROR");
             }
+            if ("ERROR".equals(json.path("status").asText())) {
+                return emptyQuote("ERROR");
+            }
             String status = tradeDate == null || !tradeDate.equals(date)
                     ? "STALE" : json.path("status").asText();
             return new StockMonitorDtos.Quote("XQ", json.path("sourceTime").asText(),
-                    json.path("collectedAt").asText(), date, number(json.get("price")),
-                    number(json.get("changePercent")), number(json.get("amount")), status);
-        } catch (JsonProcessingException exception) {
+                    json.path("collectedAt").asText(), date, quoteNumber(json.get("price")),
+                    quoteNumber(json.get("changePercent")), quoteNumber(json.get("amount")),
+                    quoteNumber(json.get("low")), quoteNumber(json.get("high")),
+                    quoteNumber(json.get("open")), quoteNumber(json.get("limitUp")),
+                    quoteNumber(json.get("limitDown")), quoteNumber(json.get("averagePrice")),
+                    quoteNumber(json.get("volume")), quoteNumber(json.get("previousClose")), status);
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
             return emptyQuote("ERROR");
         }
     }
@@ -448,7 +455,18 @@ public class StockMonitorServiceImpl implements StockMonitorService {
     }
 
     private StockMonitorDtos.Quote emptyQuote(String status) {
-        return new StockMonitorDtos.Quote("XQ", null, null, null, null, null, null, status);
+        return new StockMonitorDtos.Quote("XQ", null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, status);
+    }
+
+    private BigDecimal quoteNumber(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null; // 旧版 V1 报价没有扩展字段，缺失数值仍可读取。
+        }
+        if (!node.isNumber() || node.isFloatingPointNumber() && !Double.isFinite(node.doubleValue())) {
+            throw new IllegalArgumentException("报价数值无效");
+        }
+        return node.decimalValue();
     }
 
     private BigDecimal number(JsonNode node) {
