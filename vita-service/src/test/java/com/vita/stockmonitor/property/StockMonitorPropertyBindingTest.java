@@ -11,11 +11,14 @@ import org.springframework.mock.env.MockEnvironment;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class StockMonitorPropertyBindingTest {
+
+    private static final Pattern ENVIRONMENT_PLACEHOLDER = Pattern.compile("\\$\\{[A-Z][A-Z0-9_]*(?::[^}]*)?}");
 
     @Test
     void devTemplateUsesLocalPythonAndDisablesXueqiuByDefault() throws IOException {
@@ -27,7 +30,7 @@ class StockMonitorPropertyBindingTest {
     }
 
     @Test
-    void prodTemplateNeedsDeploymentValuesAndBindsEnvironmentOverrides() throws IOException {
+    void prodTemplateNeedsLocalValuesAndIgnoresUnmappedEnvironmentVariables() throws IOException {
         StockMonitorProperty defaults = bindTemplate("prod", null);
         assertThat(defaults.getPythonBaseUrl()).isEmpty();
         assertThat(defaults.getInternalToken()).isEmpty();
@@ -37,34 +40,37 @@ class StockMonitorPropertyBindingTest {
                 .withProperty("STOCK_MONITOR_PYTHON_BASE_URL", "http://python.internal:8000")
                 .withProperty("STOCK_MONITOR_INTERNAL_TOKEN", "test-token")
                 .withProperty("STOCK_MONITOR_XQ_ENABLED", "true");
-        StockMonitorProperty overridden = bindTemplate("prod", deployment);
-        assertThat(overridden.getPythonBaseUrl()).isEqualTo("http://python.internal:8000");
-        assertThat(overridden.getInternalToken()).isEqualTo("test-token");
-        assertThat(overridden.isXqEnabled()).isTrue();
+        StockMonitorProperty unchanged = bindTemplate("prod", deployment);
+        assertThat(unchanged.getPythonBaseUrl()).isEmpty();
+        assertThat(unchanged.getInternalToken()).isEmpty();
+        assertThat(unchanged.isXqEnabled()).isFalse();
     }
 
     @Test
-    void localProfilesWhenPresentMustMatchSafeTrackedTemplates() throws IOException {
+    void trackedTemplatesLeaveSecretsBlankAndDefaultXueqiuOff() throws IOException {
+        for (String profile : new String[]{"dev", "prod"}) {
+            PropertySource<?> template = loadYaml(findTemplate(profile));
+            assertThat(template.getProperty("vita.stock-monitor.internal-token"))
+                    .isEqualTo("");
+            assertThat(template.getProperty("vita.stock-monitor.xq-enabled"))
+                    .isEqualTo(false);
+        }
+        assertThat(loadYaml(findTemplate("prod")).getProperty("vita.stock-monitor.python-base-url"))
+                .isEqualTo("");
+    }
+
+    @Test
+    void applicationProfilesDoNotInjectEnvironmentVariables() throws IOException {
         Path repository = findTemplate("prod").getParent().getParent();
-        int present = 0;
-        for (String module : List.of("vita-admin", "vita-scheduler", "vita-openapi")) {
-            for (String profile : List.of("dev", "prod")) {
-                Path local = repository.resolve(module + "/src/main/resources/application-" + profile + ".yml");
-                if (!Files.isRegularFile(local)) {
-                    continue; // application*.yml 被 Git 忽略，干净检出仅验证上面的可跟踪模板。
-                }
-                present++;
-                PropertySource<?> actual = loadYaml(local);
-                PropertySource<?> template = loadYaml(findTemplate(profile));
-                for (String key : List.of("python-base-url", "internal-token", "xq-enabled")) {
-                    String name = "vita.stock-monitor." + key;
-                    // 比较布尔值，避免断言失败时输出本机令牌。
-                    assertThat(template.getProperty(name).equals(actual.getProperty(name)))
-                            .as(module + " " + profile + " " + name).isTrue();
-                }
+        try (Stream<Path> files = Files.walk(repository)) {
+            for (Path file : files.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().matches("application-.*\\.yml"))
+                    .filter(path -> !path.toString().contains("/target/"))
+                    .toList()) {
+                assertThat(ENVIRONMENT_PLACEHOLDER.matcher(Files.readString(file)).find())
+                        .as("环境变量占位符：" + repository.relativize(file)).isFalse();
             }
         }
-        assertThat(present).as("本机 profile 文件须全部存在或全部由部署环境提供").isIn(0, 6);
     }
 
     private StockMonitorProperty bindTemplate(String profile, MockEnvironment suppliedEnvironment) throws IOException {
