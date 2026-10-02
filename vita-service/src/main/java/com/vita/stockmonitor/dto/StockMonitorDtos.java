@@ -24,11 +24,17 @@ public final class StockMonitorDtos {
     public record SeriesPoint(String time, BigDecimal price) {
     }
 
-    public record Stock(String symbol, String code, String name, String market, int sortOrder,
-                        Profile profile, Quote quote, List<SeriesPoint> series) {
+    public record FundPoint(String collectedAt, BigDecimal inflow, BigDecimal outflow, BigDecimal netAmount) {
     }
 
-    public record Dashboard(int schemaVersion, boolean xqEnabled, String tradeDate, List<Stock> stocks) {
+    public record Stock(String symbol, String code, String name, String market, int sortOrder,
+                        Profile profile, Quote quote, List<SeriesPoint> series,
+                        String effectiveTradeDate, String dataStatus, boolean closeConfirmed,
+                        List<FundPoint> fundSeries) {
+    }
+
+    public record Dashboard(int schemaVersion, String stateId, boolean xqEnabled,
+                            String tradeDate, List<Stock> stocks) {
     }
 
     public record AdminStock(String symbol, String code, String name, String market, boolean enabled,

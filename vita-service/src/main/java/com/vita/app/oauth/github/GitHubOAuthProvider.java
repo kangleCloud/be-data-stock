@@ -1,13 +1,11 @@
 package com.vita.app.oauth.github;
 
 import cn.hutool.core.text.CharSequenceUtil;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.vita.app.oauth.github.property.GitHubOAuthProperty;
 import com.vita.app.oauth.model.AppOAuthUserProfile;
 import com.vita.app.oauth.port.AppOAuthProvider;
 import com.vita.core.exception.GlobalErrorCode;
 import com.vita.core.exception.ServiceException;
-import lombok.Data;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -155,28 +153,4 @@ public class GitHubOAuthProvider implements AppOAuthProvider {
         }
     }
 
-    @Data
-    private static class GitHubTokenResponse {
-
-        @JsonProperty("access_token")
-        private String accessToken;
-
-        private String error;
-    }
-
-    @Data
-    private static class GitHubUserResponse {
-
-        private Long id;
-
-        private String login;
-
-        private String name;
-
-        @JsonProperty("avatar_url")
-        private String avatarUrl;
-
-        @JsonProperty("html_url")
-        private String htmlUrl;
-    }
 }

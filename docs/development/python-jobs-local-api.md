@@ -14,4 +14,4 @@ Java 用 `vita.stock-monitor.python-base-url` 与 `internal-token` 直连 Python
 
 成功调用使用项目 `CommonResult<PythonRunResult>` 返回，`content` 为 `{kind,state,outcome,startedAt,finishedAt,message}`。Python 终态为 `SUCCEEDED`、`PARTIAL`、`SKIPPED` 或 `FAILED`；业务失败、源限频和冷却仍是 Python HTTP 200 的终态内容，例如 `SKIPPED/outcome=throttled|cooldown`，Java 原样返回，不误报采集成功。同类任务正在执行时，Python HTTP 409 映射为业务码 423；Python 基础设施错误映射 503；连接读超时映射 504；非本机来源映射 403。项目普通业务异常的 HTTP 外层仍为 200，以 `CommonResult.code` 表达错误。
 
-这三个入口是手动操作。Python 仍执行交易日、交易时段、分布式锁、请求间隔、源冷却和雪球总闸校验；Java 不绕过这些约束。原有市场 GET/SSE 和个股监控契约不变。
+这三个入口是服务器本机手动采集操作。Python 仍执行交易日、交易时段、分布式锁、请求间隔、源冷却和雪球总闸校验；Java 不绕过这些约束。公开大屏的手动刷新仅重新 GET Redis 缓存，不调用这些采集入口；市场和个股 GET/SSE 契约分别见 `market-snapshot-v1.md`、`doc/stock-monitor-v1.md`。

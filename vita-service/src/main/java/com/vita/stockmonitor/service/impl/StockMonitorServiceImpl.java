@@ -21,15 +21,13 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.*;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -40,8 +38,21 @@ public class StockMonitorServiceImpl implements StockMonitorService {
     private static final String ENABLED_KEY = "stock:monitor:v1:enabled";
     private static final String CONFIG_LOCK = "stock:monitor:v1:config:lock";
     private static final String LAST_TRADE_DATE_KEY = "stock:monitor:v1:lastTradeDate";
+    private static final String STATE_ID_KEY = "stock:monitor:v1:state-id";
+    private static final String UPDATES_CHANNEL = "stock:monitor:v1:updates";
+    private static final String MARKET_SNAPSHOT_KEY = "stock:market:v1:snapshot";
+    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final int MAX_STOCKS = 10;
     private static final Set<String> QUOTE_STATUSES = Set.of("FRESH", "STALE", "ERROR");
+    private static final DefaultRedisScript<Long> ENABLED_RESYNC_SCRIPT = new DefaultRedisScript<>(
+            "local old=redis.call('GET',KEYS[2]); "
+                    + "redis.call('SET',KEYS[1],ARGV[1]); redis.call('SET',KEYS[2],ARGV[2]); "
+                    + "redis.call('PUBLISH',KEYS[3],cjson.encode({baseStateId=old or cjson.null,"
+                    + "stateId=ARGV[2],changedSymbols={},resync=true})); return 1", Long.class);
+    private static final DefaultRedisScript<Long> RESYNC_SCRIPT = new DefaultRedisScript<>(
+            "local old=redis.call('GET',KEYS[1]); redis.call('SET',KEYS[1],ARGV[1]); "
+                    + "redis.call('PUBLISH',KEYS[2],cjson.encode({baseStateId=old or cjson.null,"
+                    + "stateId=ARGV[1],changedSymbols={},resync=true})); return 1", Long.class);
 
     private final StockSymbolDictionaryMapper dictionaryMapper;
     private final StockMonitorConfigMapper configMapper;
@@ -295,9 +306,23 @@ public class StockMonitorServiceImpl implements StockMonitorService {
             throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "启用股票缺少字典资料");
         }
         try {
-            redisTemplate.opsForValue().set(ENABLED_KEY, objectMapper.writeValueAsString(enabled));
+            Long result = redisTemplate.execute(ENABLED_RESYNC_SCRIPT,
+                    List.of(ENABLED_KEY, STATE_ID_KEY, UPDATES_CHANNEL),
+                    objectMapper.writeValueAsString(enabled), UUID.randomUUID().toString().replace("-", ""));
+            if (!Long.valueOf(1).equals(result)) {
+                throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "监控清单缓存发布失败");
+            }
         } catch (JsonProcessingException exception) {
             throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "监控清单缓存序列化失败");
+        }
+    }
+
+    @Override
+    public void publishResync() {
+        Long result = redisTemplate.execute(RESYNC_SCRIPT, List.of(STATE_ID_KEY, UPDATES_CHANNEL),
+                UUID.randomUUID().toString().replace("-", ""));
+        if (!Long.valueOf(1).equals(result)) {
+            throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "个股状态版本发布失败");
         }
     }
 
@@ -309,8 +334,23 @@ public class StockMonitorServiceImpl implements StockMonitorService {
 
     @Override
     public StockMonitorDtos.Dashboard dashboard() {
+        String before = readStateId();
+        StockMonitorDtos.Dashboard dashboard = buildDashboard(before);
+        if (!Objects.equals(before, readStateId())) {
+            String retryId = readStateId();
+            dashboard = buildDashboard(retryId);
+            if (!Objects.equals(retryId, readStateId())) {
+                throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "个股数据正在更新，请重试");
+            }
+        }
+        return dashboard;
+    }
+
+    private StockMonitorDtos.Dashboard buildDashboard(String stateId) {
         List<StockMonitorDtos.DictionaryItem> enabled = readEnabledCache();
         String tradeDate = xqEnabled ? validTradeDate(redisTemplate.opsForValue().get(LAST_TRADE_DATE_KEY)) : null;
+        String fundDate = xqEnabled ? readMarketFundDate() : null;
+        String today = LocalDate.now(SHANGHAI).toString();
         Map<String, StockMonitorProfile> profiles = xqEnabled
                 ? profileBySymbol(enabled.stream().map(StockMonitorDtos.DictionaryItem::symbol).toList())
                 : Map.of();
@@ -318,13 +358,105 @@ public class StockMonitorServiceImpl implements StockMonitorService {
         for (int i = 0; i < enabled.size(); i++) {
             StockMonitorDtos.DictionaryItem item = enabled.get(i);
             StockMonitorDtos.Quote quote = xqEnabled ? readQuote(item.symbol(), tradeDate) : emptyQuote("DISABLED");
-            List<StockMonitorDtos.SeriesPoint> series = xqEnabled && quote.tradeDate() != null
-                    && !"ERROR".equals(quote.status())
-                    ? readSeries(quote.tradeDate(), item.symbol()) : List.of();
+            String effectiveDate = quote.tradeDate();
+            List<StockMonitorDtos.SeriesPoint> latestPriceSeries = xqEnabled && tradeDate != null
+                    ? readSeries(tradeDate, item.symbol()) : List.of();
+            if (!latestPriceSeries.isEmpty() && (effectiveDate == null || tradeDate.compareTo(effectiveDate) > 0)) {
+                effectiveDate = tradeDate;
+                if (quote.tradeDate() != null) {
+                    quote = emptyQuote("ERROR");
+                }
+            }
+            List<StockMonitorDtos.SeriesPoint> series = effectiveDate != null && effectiveDate.equals(tradeDate)
+                    ? latestPriceSeries : List.of();
+            if (effectiveDate == null && fundDate != null
+                    && !readFundSeries(fundDate, item.symbol()).isEmpty()) {
+                effectiveDate = fundDate;
+            }
+            if (effectiveDate == null && tradeDate != null && !tradeDate.equals(fundDate)
+                    && !readFundSeries(tradeDate, item.symbol()).isEmpty()) {
+                effectiveDate = tradeDate;
+            }
+            if (effectiveDate != null && series.isEmpty()) {
+                series = readSeries(effectiveDate, item.symbol());
+            }
+            List<StockMonitorDtos.FundPoint> fundSeries = effectiveDate == null
+                    ? List.of() : readFundSeries(effectiveDate, item.symbol());
+            boolean closeConfirmed = closeConfirmed(quote);
+            String dataStatus = !xqEnabled ? "DISABLED" : effectiveDate == null ? "NO_DATA"
+                    : !today.equals(effectiveDate) ? "HISTORICAL"
+                    : "FRESH".equals(quote.status()) || closeConfirmed ? "CURRENT" : "DELAYED";
             stocks.add(new StockMonitorDtos.Stock(item.symbol(), item.code(), item.name(), item.market(),
-                    i + 1, profileView(profiles.get(item.symbol())), quote, series));
+                    i + 1, profileView(profiles.get(item.symbol())), quote, series,
+                    effectiveDate, dataStatus, closeConfirmed, fundSeries));
         }
-        return new StockMonitorDtos.Dashboard(1, xqEnabled, tradeDate, stocks);
+        return new StockMonitorDtos.Dashboard(1, stateId, xqEnabled, tradeDate, stocks);
+    }
+
+    private String readStateId() {
+        String value = redisTemplate.opsForValue().get(STATE_ID_KEY);
+        if (value != null && !value.matches("[0-9a-f]{32}")) {
+            throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "个股状态版本格式错误");
+        }
+        return value;
+    }
+
+    private String readMarketFundDate() {
+        String raw = redisTemplate.opsForValue().get(MARKET_SNAPSHOT_KEY);
+        if (raw == null) {
+            return null;
+        }
+        try {
+            JsonNode module = objectMapper.readTree(raw).path("modules").path("marketFundFlow");
+            return module.path("data").isObject() ? validTradeDate(module.path("tradeDate").asText(null)) : null;
+        } catch (JsonProcessingException exception) {
+            return null;
+        }
+    }
+
+    private boolean closeConfirmed(StockMonitorDtos.Quote quote) {
+        if (quote.sourceTime() == null || quote.tradeDate() == null) {
+            return false;
+        }
+        OffsetDateTime source = OffsetDateTime.parse(quote.sourceTime());
+        return quote.tradeDate().equals(source.atZoneSameInstant(SHANGHAI).toLocalDate().toString())
+                && source.atZoneSameInstant(SHANGHAI).toLocalTime().isAfter(LocalTime.of(15, 0));
+    }
+
+    private List<StockMonitorDtos.FundPoint> readFundSeries(String tradeDate, String symbol) {
+        String raw = redisTemplate.opsForValue().get("stock:monitor:v1:fund-series:" + tradeDate + ":" + symbol);
+        if (raw == null) {
+            return List.of();
+        }
+        try {
+            JsonNode json = objectMapper.readTree(raw);
+            if (!json.isArray()) {
+                return List.of();
+            }
+            List<StockMonitorDtos.FundPoint> points = new ArrayList<>();
+            OffsetDateTime previous = null;
+            for (JsonNode point : json) {
+                String time = point.path("collectedAt").asText(null);
+                BigDecimal inflow = number(point.get("inflow"));
+                BigDecimal outflow = number(point.get("outflow"));
+                BigDecimal netAmount = number(point.get("netAmount"));
+                if (!validOffsetTime(time) || !tradeDate.equals(OffsetDateTime.parse(time)
+                        .atZoneSameInstant(SHANGHAI).toLocalDate().toString())
+                        || inflow == null || outflow == null || netAmount == null
+                        || netAmount.compareTo(inflow.subtract(outflow)) != 0) {
+                    return List.of();
+                }
+                OffsetDateTime collectedAt = OffsetDateTime.parse(time);
+                if (previous != null && !collectedAt.isAfter(previous)) {
+                    return List.of();
+                }
+                points.add(new StockMonitorDtos.FundPoint(time, inflow, outflow, netAmount));
+                previous = collectedAt;
+            }
+            return points;
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            return List.of();
+        }
     }
 
     private List<StockMonitorDtos.DictionaryItem> readEnabledCache() {
@@ -376,6 +508,10 @@ public class StockMonitorServiceImpl implements StockMonitorService {
             if (date == null) {
                 return emptyQuote("ERROR");
             }
+            if (!date.equals(OffsetDateTime.parse(json.path("sourceTime").asText())
+                    .atZoneSameInstant(SHANGHAI).toLocalDate().toString())) {
+                return emptyQuote("ERROR");
+            }
             if ("ERROR".equals(json.path("status").asText())) {
                 return emptyQuote("ERROR");
             }
@@ -408,7 +544,9 @@ public class StockMonitorServiceImpl implements StockMonitorService {
             for (JsonNode point : json) {
                 String time = point.path("time").asText(null);
                 BigDecimal price = number(point.get("price"));
-                if (!validOffsetTime(time) || price == null || previous != null && previous.compareTo(time) >= 0) {
+                if (!validOffsetTime(time) || !tradeDate.equals(OffsetDateTime.parse(time)
+                        .atZoneSameInstant(SHANGHAI).toLocalDate().toString())
+                        || price == null || previous != null && previous.compareTo(time) >= 0) {
                     return List.of();
                 }
                 points.add(new StockMonitorDtos.SeriesPoint(time, price));
@@ -470,7 +608,9 @@ public class StockMonitorServiceImpl implements StockMonitorService {
     }
 
     private BigDecimal number(JsonNode node) {
-        return node != null && node.isNumber() ? node.decimalValue() : null;
+        return node != null && node.isNumber()
+                && (!node.isFloatingPointNumber() || Double.isFinite(node.doubleValue()))
+                ? node.decimalValue() : null;
     }
 
     private String validTradeDate(String date) {

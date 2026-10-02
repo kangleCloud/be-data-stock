@@ -42,6 +42,7 @@
 - 源码文件必须使用 UTF-8；Java 代码使用 4 空格缩进，并遵循目标文件已有的导入、注解和空行风格。
 - 未经任务明确要求，不得批量格式化无关代码或引入新的格式化工具。
 - 类名使用 `PascalCase`，方法名和字段名使用 `camelCase`，常量使用 `UPPER_SNAKE_CASE`，包名必须全小写。
+- 禁止在 Java 类型或方法内部声明命名类，包括 `static class`；需要辅助类时单独创建顶层 `.java` 文件。根 Maven `validate` 阶段运行 `tools/checks/no_nested_classes.py`，扫描全部 `vita-*/src/main/java` 与 `src/test/java`。
 - 类型后缀必须保持一致：`*Controller`、`*Service`、`*ServiceImpl`、`*Mapper`、`*CreateDto`、`*UpdateDto`、`*SearchDto`、`*DetailVo`、`*ListVo`、`*PageVo`、`*OptionVo`、`*Property`。
 - 配置类必须放在领域级 `property` 包中，使用单数 `XxxProperty` 命名；不得新增 `*Properties`，也不得将配置字段散落到 `config`、`service` 或 `support` 中。
 

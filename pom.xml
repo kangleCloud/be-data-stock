@@ -236,6 +236,27 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <inherited>false</inherited>
+                <executions>
+                    <execution>
+                        <id>check-no-nested-classes</id>
+                        <phase>validate</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target>
+                                <exec executable="python3" failonerror="true">
+                                    <arg value="${maven.multiModuleProjectDirectory}/tools/checks/no_nested_classes.py"/>
+                                    <arg value="${maven.multiModuleProjectDirectory}"/>
+                                </exec>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>

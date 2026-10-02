@@ -51,10 +51,16 @@ class MarketSnapshotServiceContractTest {
     }
 
     @Test
-    void returnsCompleteNewSnapshotWithoutTransformingListsOrSeries() throws Exception {
+    void returnsCompleteSnapshotWithLegacyVersionAndReconciliationFlag() throws Exception {
         when(values.get(anyString())).thenReturn(SNAPSHOT);
 
-        assertThat(service.getSnapshot()).isEqualTo(mapper.readTree(SNAPSHOT));
+        var result = service.getSnapshot();
+        assertThat(result.path("snapshotId").isNull()).isTrue();
+        assertThat(result.path("modules").path("marketFundFlow").path("data")
+                .path("reconciledFromLegacy").booleanValue()).isFalse();
+        assertThat(result.path("modules").path("marketFundFlow").path("data")
+                .path("series")).isEqualTo(fixture().path("modules").path("marketFundFlow")
+                .path("data").path("series"));
         verify(values, times(1)).get("stock:market:v1:snapshot");
     }
 
@@ -74,24 +80,44 @@ class MarketSnapshotServiceContractTest {
     }
 
     @Test
-    void acceptsExplicitlyNullMarketMeasuresWithoutInventingZero() throws Exception {
+    void rejectsMissingFlowsAndCountMismatch() throws Exception {
         ObjectNode snapshot = fixture();
         ObjectNode data = (ObjectNode) module(snapshot, "marketFundFlow").path("data");
         ObjectNode latest = (ObjectNode) data.path("latest");
         latest.putNull("inflow");
-        latest.putNull("outflow");
-        latest.putNull("netAmount");
-        latest.putNull("riseCount");
-        for (var point : data.path("series")) {
-            ObjectNode entry = (ObjectNode) point;
-            entry.putNull("inflow");
-            entry.putNull("outflow");
-            entry.putNull("netAmount");
-        }
+        assertUnavailable(snapshot);
+
+        snapshot = fixture();
+        latest = (ObjectNode) module(snapshot, "marketFundFlow").path("data").path("latest");
+        latest.put("stockCount", 4701);
+        assertUnavailable(snapshot);
+    }
+
+    @Test
+    void correctsLegacyNetAmountsInLatestAndSeries() throws Exception {
+        ObjectNode snapshot = fixture();
+        ObjectNode data = (ObjectNode) module(snapshot, "marketFundFlow").path("data");
+        ((ObjectNode) data.path("latest")).put("netAmount", 1);
+        ((ObjectNode) data.path("series").get(0)).put("netAmount", 2);
         when(values.get(anyString())).thenReturn(snapshot.toString());
 
-        assertThat(service.getSnapshot().path("modules").path("marketFundFlow")
-                .path("data").path("latest").path("inflow").isNull()).isTrue();
+        var corrected = service.getSnapshot().path("modules").path("marketFundFlow").path("data");
+        assertThat(corrected.path("reconciledFromLegacy").booleanValue()).isTrue();
+        assertThat(corrected.path("latest").path("netAmount").decimalValue()).isEqualByComparingTo("300000");
+        assertThat(corrected.path("series").get(0).path("netAmount").decimalValue())
+                .isEqualByComparingTo("100000");
+    }
+
+    @Test
+    void acceptsPythonHexSnapshotId() throws Exception {
+        ObjectNode snapshot = fixture();
+        snapshot.put("snapshotId", "0123456789abcdef0123456789abcdef");
+        ((ObjectNode) module(snapshot, "marketFundFlow").path("data"))
+                .put("reconciledFromLegacy", false);
+        when(values.get(anyString())).thenReturn(snapshot.toString());
+
+        assertThat(service.getSnapshot().path("snapshotId").textValue())
+                .isEqualTo("0123456789abcdef0123456789abcdef");
     }
 
     @Test

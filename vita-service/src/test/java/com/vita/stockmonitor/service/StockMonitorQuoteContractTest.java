@@ -13,6 +13,8 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -111,7 +113,11 @@ class StockMonitorQuoteContractTest {
         assertThat(dashboard.stocks().get(0).quote().price()).isNull();
         assertThat(dashboard.stocks().get(0).quote().volume()).isNull();
         assertThat(dashboard.stocks().get(0).series()).isEmpty();
-        verify(values, times(1)).get(anyString());
+        assertThat(dashboard.stocks().get(0).fundSeries()).isEmpty();
+        assertThat(dashboard.stocks().get(0).dataStatus()).isEqualTo("DISABLED");
+        verify(values, never()).get(startsWith("stock:monitor:v1:quote:"));
+        verify(values, never()).get(startsWith("stock:monitor:v1:series:"));
+        verify(values, never()).get(startsWith("stock:monitor:v1:fund-series:"));
     }
 
     @Test
@@ -151,6 +157,70 @@ class StockMonitorQuoteContractTest {
         assertThat(stock.quote().status()).isEqualTo("STALE");
         assertThat(stock.series()).hasSize(1);
         verify(values).get("stock:monitor:v1:series:2026-09-28:SH600000");
+    }
+
+    @Test
+    void historicalCloseUsesActualQuoteDateAndStrictlyAfterThreeOClock() {
+        String close = BASE.replace("14:30:00", "15:02:00") + "\"status\":\"FRESH\"}";
+        StockMonitorDtos.Stock confirmed = dashboardFrom(Map.of(
+                "stock:monitor:v1:quote:SH600000", close)).stocks().get(0);
+
+        assertThat(confirmed.effectiveTradeDate()).isEqualTo(TRADE_DATE);
+        assertThat(confirmed.dataStatus()).isEqualTo("HISTORICAL");
+        assertThat(confirmed.closeConfirmed()).isTrue();
+
+        String beforeClose = BASE.replace("14:30:00", "14:56:00") + "\"status\":\"FRESH\"}";
+        StockMonitorDtos.Stock unconfirmed = dashboardFrom(Map.of(
+                "stock:monitor:v1:quote:SH600000", beforeClose)).stocks().get(0);
+        assertThat(unconfirmed.closeConfirmed()).isFalse();
+    }
+
+    @Test
+    void fundOnlySelectsFundDateAndNeverMixesOtherDayPrice() {
+        StockMonitorDtos.Stock stock = dashboardFrom(Map.of(
+                "stock:market:v1:snapshot", "{\"modules\":{\"marketFundFlow\":{\"tradeDate\":\"2026-09-29\",\"data\":{}}}}",
+                "stock:monitor:v1:fund-series:2026-09-29:SH600000",
+                "[{\"collectedAt\":\"2026-09-29T10:00:00+08:00\",\"inflow\":100,\"outflow\":40,\"netAmount\":60}]",
+                "stock:monitor:v1:series:2026-09-28:SH600000",
+                "[{\"time\":\"2026-09-28T14:30:00+08:00\",\"price\":10.2}]")).stocks().get(0);
+
+        assertThat(stock.effectiveTradeDate()).isEqualTo("2026-09-29");
+        assertThat(stock.fundSeries()).hasSize(1);
+        assertThat(stock.series()).isEmpty();
+        assertThat(stock.dataStatus()).isEqualTo("HISTORICAL");
+    }
+
+    @Test
+    void validPriceDateWinsAndFundGapRemainsEmpty() {
+        StockMonitorDtos.Stock stock = dashboardFrom(Map.of(
+                "stock:monitor:v1:quote:SH600000", BASE + "\"status\":\"FRESH\"}",
+                "stock:market:v1:snapshot", "{\"modules\":{\"marketFundFlow\":{\"tradeDate\":\"2026-09-29\",\"data\":{}}}}",
+                "stock:monitor:v1:fund-series:2026-09-29:SH600000",
+                "[{\"collectedAt\":\"2026-09-29T10:00:00+08:00\",\"inflow\":100,\"outflow\":40,\"netAmount\":60}]"
+        )).stocks().get(0);
+
+        assertThat(stock.effectiveTradeDate()).isEqualTo(TRADE_DATE);
+        assertThat(stock.fundSeries()).isEmpty();
+    }
+
+    @SuppressWarnings("unchecked")
+    private StockMonitorDtos.Dashboard dashboardFrom(Map<String, String> cache) {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.get(anyString())).thenAnswer(invocation -> {
+            String key = invocation.getArgument(0);
+            if ("stock:monitor:v1:enabled".equals(key)) {
+                return "[{\"symbol\":\"SH600000\",\"code\":\"600000\",\"name\":\"浦发银行\",\"market\":\"SH\"}]";
+            }
+            return cache.get(key);
+        });
+        StockMonitorProfileMapper profiles = mock(StockMonitorProfileMapper.class);
+        when(profiles.selectList(any(SFunction.class), anyCollection())).thenReturn(List.of());
+        StockMonitorProperty property = new StockMonitorProperty();
+        property.setXqEnabled(true);
+        return new StockMonitorServiceImpl(null, null, profiles, redis, null, null,
+                new ObjectMapper(), property).dashboard();
     }
 
     private StockMonitorDtos.Quote readQuote() {

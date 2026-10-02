@@ -1,9 +1,9 @@
-package com.vita.market.service;
+package com.vita.stockmonitor.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.vita.core.exception.ServiceException;
+import com.vita.stockmonitor.dto.StockMonitorDtos;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,50 +15,45 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/**
- * 每个进程共享的行情推送服务。Redis 通知只负责唤醒，数据始终重新读取快照键。
- */
+/** 个股监控事件只发送变更股票；版本缺口交给客户端重新读取全量 GET。 */
 @Service
-public class MarketSnapshotStreamService implements MessageListener {
-
-    private static final Logger LOG = LoggerFactory.getLogger(MarketSnapshotStreamService.class);
+public class StockMonitorStreamService implements MessageListener {
+    private static final Logger LOG = LoggerFactory.getLogger(StockMonitorStreamService.class);
     private static final long STREAM_TIMEOUT_MS = 60_000L;
-    private static final long HEARTBEAT_SECONDS = 15L;
-
-    private final MarketSnapshotService snapshotService;
+    private final StockMonitorService monitorService;
     private final ObjectMapper objectMapper;
     private final ScheduledExecutorService scheduler;
-    private final Set<MarketStreamClient> clients = ConcurrentHashMap.newKeySet();
+    private final Set<StockMonitorStreamClient> clients = ConcurrentHashMap.newKeySet();
     private final Object broadcastLock = new Object();
 
     @Autowired
-    public MarketSnapshotStreamService(MarketSnapshotService snapshotService, ObjectMapper objectMapper) {
-        this(snapshotService, objectMapper, Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread thread = new Thread(r, "market-snapshot-heartbeat");
+    public StockMonitorStreamService(StockMonitorService monitorService, ObjectMapper objectMapper) {
+        this(monitorService, objectMapper, Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "stock-monitor-heartbeat");
             thread.setDaemon(true);
             return thread;
         }));
     }
 
-    MarketSnapshotStreamService(MarketSnapshotService snapshotService, ObjectMapper objectMapper,
-                                ScheduledExecutorService scheduler) {
-        this.snapshotService = snapshotService;
+    StockMonitorStreamService(StockMonitorService monitorService, ObjectMapper objectMapper,
+                              ScheduledExecutorService scheduler) {
+        this.monitorService = monitorService;
         this.objectMapper = objectMapper;
         this.scheduler = scheduler;
     }
 
     public SseEmitter open() {
         synchronized (broadcastLock) {
-            // 与通知读取串行化：建流校验和首帧之间不能漏掉更新。
-            String snapshotId = currentSnapshotId();
+            String stateId = monitorService.dashboard().stateId();
             SseEmitter emitter = createEmitter();
-            MarketStreamClient client = new MarketStreamClient(emitter, snapshotId);
+            StockMonitorStreamClient client = new StockMonitorStreamClient(emitter, stateId);
             emitter.onCompletion(() -> close(client, false));
             emitter.onTimeout(() -> close(client, true));
             emitter.onError(error -> close(client, false));
@@ -67,13 +62,13 @@ public class MarketSnapshotStreamService implements MessageListener {
                 synchronized (client) {
                     if (!client.closed.get()) {
                         client.heartbeat = scheduler.scheduleAtFixedRate(() -> heartbeat(client),
-                                HEARTBEAT_SECONDS, HEARTBEAT_SECONDS, TimeUnit.SECONDS);
+                                15, 15, TimeUnit.SECONDS);
                         client.expiry = scheduler.schedule(() -> close(client, true),
                                 STREAM_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                     }
                 }
                 ObjectNode ready = objectMapper.createObjectNode();
-                putNullable(ready, "snapshotId", snapshotId);
+                putNullable(ready, "stateId", stateId);
                 send(client, "ready", ready);
             } catch (RuntimeException exception) {
                 close(client, true);
@@ -91,89 +86,83 @@ public class MarketSnapshotStreamService implements MessageListener {
             }
             try {
                 JsonNode notice = objectMapper.readTree(new String(message.getBody(), StandardCharsets.UTF_8));
-                JsonNode snapshot = snapshotService.getSnapshot();
-                String nextId = snapshot.path("snapshotId").textValue();
-                boolean valid = validNotice(notice) && nextId != null
-                        && nextId.equals(notice.path("snapshotId").textValue());
-                for (MarketStreamClient client : clients) {
-                    if (valid && !client.resyncRequired && nextId.equals(client.snapshotId)) {
+                StockMonitorDtos.Dashboard dashboard = monitorService.dashboard();
+                boolean valid = validNotice(notice) && dashboard.stateId() != null
+                        && dashboard.stateId().equals(notice.path("stateId").textValue());
+                for (StockMonitorStreamClient client : clients) {
+                    if (valid && !client.resyncRequired && dashboard.stateId().equals(client.stateId)) {
                         continue;
                     }
-                    if (!valid || client.resyncRequired || client.snapshotId == null
-                            || !client.snapshotId.equals(notice.path("previousSnapshotId").textValue())) {
+                    if (!valid || client.resyncRequired || client.stateId == null
+                            || !client.stateId.equals(notice.path("baseStateId").textValue())
+                            || notice.path("resync").asBoolean(false)) {
                         resync(client);
                         continue;
                     }
                     ObjectNode patch = objectMapper.createObjectNode();
-                    patch.put("baseSnapshotId", client.snapshotId);
-                    patch.put("snapshotId", nextId);
-                    patch.set("generatedAt", snapshot.path("generatedAt"));
-                    ObjectNode changed = patch.putObject("modules");
-                    for (JsonNode name : notice.path("changedModules")) {
-                        changed.set(name.textValue(), snapshot.path("modules").path(name.textValue()));
+                    patch.put("baseStateId", client.stateId);
+                    patch.put("stateId", dashboard.stateId());
+                    var stocks = patch.putArray("stocks");
+                    Set<String> changed = new HashSet<>();
+                    notice.path("changedSymbols").forEach(node -> changed.add(node.textValue()));
+                    for (StockMonitorDtos.Stock stock : dashboard.stocks()) {
+                        if (changed.remove(stock.symbol())) {
+                            stocks.add(objectMapper.valueToTree(stock));
+                        }
+                    }
+                    if (!changed.isEmpty()) {
+                        resync(client);
+                        continue;
                     }
                     send(client, "patch", patch);
-                    client.snapshotId = nextId;
+                    client.stateId = dashboard.stateId();
                 }
             } catch (Exception exception) {
-                LOG.warn("行情快照通知处理失败，通知客户端重新获取快照", exception);
-                for (MarketStreamClient client : clients) {
+                LOG.warn("个股通知处理失败，通知客户端重新获取快照", exception);
+                for (StockMonitorStreamClient client : clients) {
                     resync(client);
                 }
             }
         }
     }
 
-    private String currentSnapshotId() {
-        try {
-            return snapshotService.getSnapshot().path("snapshotId").textValue();
-        } catch (ServiceException exception) {
-            if (Integer.valueOf(404).equals(exception.getCode())) {
-                return null;
-            }
-            throw exception;
-        }
-    }
-
     private boolean validNotice(JsonNode notice) {
-        if (notice == null || !notice.isObject() || notice.path("schemaVersion").asInt(-1) != 1
-                || !validId(notice.path("snapshotId").textValue())
-                || !notice.path("changedModules").isArray()) {
+        if (notice == null || !notice.isObject() || !validId(notice.path("stateId").textValue())
+                || !notice.path("changedSymbols").isArray()) {
             return false;
         }
-        JsonNode previous = notice.get("previousSnapshotId");
-        if (previous == null || !(previous.isNull() || validId(previous.textValue()))) {
+        JsonNode base = notice.get("baseStateId");
+        if (base == null || !(base.isNull() || validId(base.textValue()))) {
             return false;
         }
-        Set<String> names = Set.of("industrySectors", "conceptSectors", "marketFundFlow");
-        Set<String> seen = new java.util.HashSet<>();
-        for (JsonNode name : notice.path("changedModules")) {
-            if (!name.isTextual() || !names.contains(name.textValue()) || !seen.add(name.textValue())) {
+        Set<String> seen = new HashSet<>();
+        for (JsonNode symbol : notice.path("changedSymbols")) {
+            if (!symbol.isTextual() || !symbol.textValue().matches("^(SH|SZ|BJ)[0-9]{6}$")
+                    || !seen.add(symbol.textValue())) {
                 return false;
             }
         }
-        return true;
+        return !notice.has("resync") || notice.path("resync").isBoolean();
     }
 
     private boolean validId(String id) {
         return id != null && id.matches("[0-9a-f]{32}");
     }
 
-    private void resync(MarketStreamClient client) {
+    private void resync(StockMonitorStreamClient client) {
         client.resyncRequired = true;
-        ObjectNode event = objectMapper.createObjectNode();
-        send(client, "resync", event);
+        send(client, "resync", objectMapper.createObjectNode());
     }
 
-    private void putNullable(ObjectNode node, String field, String value) {
+    private void putNullable(ObjectNode object, String field, String value) {
         if (value == null) {
-            node.putNull(field);
+            object.putNull(field);
         } else {
-            node.put(field, value);
+            object.put(field, value);
         }
     }
 
-    private void send(MarketStreamClient client, String eventName, JsonNode payload) {
+    private void send(StockMonitorStreamClient client, String eventName, JsonNode payload) {
         synchronized (client) {
             if (client.closed.get()) {
                 return;
@@ -181,13 +170,13 @@ public class MarketSnapshotStreamService implements MessageListener {
             try {
                 client.emitter.send(SseEmitter.event().name(eventName).data(payload.toString()));
             } catch (IOException | IllegalStateException exception) {
-                LOG.debug("行情快照流写入失败，关闭连接", exception);
+                LOG.debug("个股监控流写入失败，关闭连接", exception);
                 close(client, false);
             }
         }
     }
 
-    private void heartbeat(MarketStreamClient client) {
+    private void heartbeat(StockMonitorStreamClient client) {
         synchronized (client) {
             if (client.closed.get()) {
                 return;
@@ -195,13 +184,12 @@ public class MarketSnapshotStreamService implements MessageListener {
             try {
                 client.emitter.send(SseEmitter.event().comment("heartbeat"));
             } catch (IOException | IllegalStateException exception) {
-                LOG.debug("行情快照流心跳写入失败，关闭连接", exception);
                 close(client, false);
             }
         }
     }
 
-    private void close(MarketStreamClient client, boolean complete) {
+    private void close(StockMonitorStreamClient client, boolean complete) {
         synchronized (client) {
             if (!client.closed.compareAndSet(false, true)) {
                 return;
@@ -217,8 +205,7 @@ public class MarketSnapshotStreamService implements MessageListener {
                 try {
                     client.emitter.complete();
                 } catch (Exception exception) {
-                    // 连接已断开时 complete 仍可能触发响应刷新异常；资源已清理，无需再交给 MVC 写响应。
-                    LOG.debug("行情快照流已断开，完成响应失败", exception);
+                    LOG.debug("个股监控流已断开，完成响应失败", exception);
                 }
             }
         }
@@ -228,13 +215,9 @@ public class MarketSnapshotStreamService implements MessageListener {
         return new SseEmitter(STREAM_TIMEOUT_MS);
     }
 
-    int activeClientCount() {
-        return clients.size();
-    }
-
     @PreDestroy
     public void shutdown() {
-        for (MarketStreamClient client : clients) {
+        for (StockMonitorStreamClient client : clients) {
             close(client, true);
         }
         scheduler.shutdownNow();

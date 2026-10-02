@@ -3,18 +3,22 @@ package com.vita.market.service.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vita.core.exception.GlobalErrorCode;
 import com.vita.core.exception.ServiceException;
 import com.vita.market.service.MarketSnapshotService;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * 从 AKShare 采集程序写入的普通 JSON 中读取市场快照。
@@ -55,6 +59,7 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
         try {
             JsonNode snapshot = objectMapper.readTree(raw);
             validate(snapshot);
+            reconcile(snapshot);
             return snapshot;
         } catch (JsonProcessingException | IllegalArgumentException exception) {
             throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "市场快照格式不正确");
@@ -68,6 +73,7 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
                 || snapshot.path("schemaVersion").intValue() != 1
                 || !"akshare".equals(snapshot.path("provider").textValue())
                 || !validOffsetTime(snapshot.path("generatedAt"))
+                || !validSnapshotId(snapshot.get("snapshotId"))
                 || !snapshot.path("modules").isObject()) {
             throw new IllegalArgumentException("市场快照顶层字段不合法");
         }
@@ -141,8 +147,9 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
     }
 
     private boolean validMarketData(JsonNode data, String tradeDate) {
-        if (!data.isObject() || !hasExactlyFields(data, MARKET_DATA_FIELDS)
+        if (!data.isObject() || !hasMarketFields(data)
                 || !"THS_INDIVIDUAL_AGGREGATE".equals(data.path("source").textValue())
+                || data.has("reconciledFromLegacy") && !data.path("reconciledFromLegacy").isBoolean()
                 || !data.path("latest").isObject() || !data.path("series").isArray()) {
             return false;
         }
@@ -150,8 +157,9 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
         if (!hasExactlyFields(latest, MARKET_LATEST_FIELDS)
                 || !validCollectionTime(latest.get("collectedAt"), tradeDate)
                 || !validMarketAmounts(latest)
-                || !isNullableCount(latest, "riseCount") || !isNullableCount(latest, "fallCount")
-                || !isNullableCount(latest, "flatCount") || !isNullableCount(latest, "stockCount")) {
+                || !isCount(latest, "riseCount") || !isCount(latest, "fallCount")
+                || !isCount(latest, "flatCount") || !isCount(latest, "stockCount")
+                || !validCountTotal(latest)) {
             return false;
         }
         Instant previous = null;
@@ -172,9 +180,73 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
     }
 
     private boolean validMarketAmounts(JsonNode object) {
-        return isNullableFiniteNumber(object, "inflow")
-                && isNullableFiniteNumber(object, "outflow")
+        return isFiniteNumber(object, "inflow")
+                && isFiniteNumber(object, "outflow")
                 && isNullableFiniteNumber(object, "netAmount");
+    }
+
+    private boolean hasMarketFields(JsonNode data) {
+        Set<String> fields = new java.util.HashSet<>();
+        data.fieldNames().forEachRemaining(fields::add);
+        fields.remove("reconciledFromLegacy");
+        return fields.equals(MARKET_DATA_FIELDS);
+    }
+
+    private boolean validCountTotal(JsonNode latest) {
+        BigInteger total = latest.path("riseCount").bigIntegerValue()
+                .add(latest.path("fallCount").bigIntegerValue())
+                .add(latest.path("flatCount").bigIntegerValue());
+        return total.equals(latest.path("stockCount").bigIntegerValue());
+    }
+
+    private void reconcile(JsonNode snapshot) {
+        ObjectNode root = (ObjectNode) snapshot;
+        if (!root.has("snapshotId")) {
+            root.putNull("snapshotId");
+        }
+        JsonNode data = snapshot.path("modules").path("marketFundFlow").path("data");
+        if (data.isNull()) {
+            return;
+        }
+        boolean corrected = reconcileAmount((ObjectNode) data.path("latest"));
+        for (JsonNode point : data.path("series")) {
+            corrected |= reconcileAmount((ObjectNode) point);
+        }
+        ((ObjectNode) data).put("reconciledFromLegacy",
+                corrected || data.path("reconciledFromLegacy").asBoolean(false));
+    }
+
+    private boolean reconcileAmount(ObjectNode values) {
+        BigDecimal net = values.path("inflow").decimalValue().subtract(values.path("outflow").decimalValue());
+        JsonNode old = values.get("netAmount");
+        if (old != null && old.isNumber() && old.decimalValue().compareTo(net) == 0) {
+            return false;
+        }
+        values.put("netAmount", net);
+        return true;
+    }
+
+    private boolean validSnapshotId(JsonNode value) {
+        if (value == null || value.isNull()) {
+            return true;
+        }
+        try {
+            return value.isTextual() && (value.textValue().matches("[0-9a-f]{32}")
+                    || UUID.fromString(value.textValue()).toString().equals(value.textValue()));
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private boolean isFiniteNumber(JsonNode object, String field) {
+        JsonNode value = object.get(field);
+        return value != null && value.isNumber()
+                && (!value.isFloatingPointNumber() || Double.isFinite(value.doubleValue()));
+    }
+
+    private boolean isCount(JsonNode object, String field) {
+        JsonNode value = object.get(field);
+        return value != null && value.isIntegralNumber() && value.canConvertToLong() && value.longValue() >= 0;
     }
 
     private boolean validCollectionTime(JsonNode time, String tradeDate) {

@@ -27,4 +27,6 @@ public interface StockMonitorService {
     List<String> enabledSymbols();
 
     void rebuildEnabledCache();
+
+    void publishResync();
 }

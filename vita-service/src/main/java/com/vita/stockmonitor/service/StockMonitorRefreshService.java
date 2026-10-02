@@ -140,7 +140,10 @@ public class StockMonitorRefreshService {
         }
         if (!symbols.isEmpty()) {
             List<StockMonitorPythonClient.ProfileItem> profiles = pythonClient.profiles(symbols);
-            withConfigLock(() -> synchronizeProfiles(symbols, profiles));
+            withConfigLock(() -> {
+                synchronizeProfiles(symbols, profiles);
+                monitorService.publishResync();
+            });
         }
     }
 
