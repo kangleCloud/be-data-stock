@@ -11,7 +11,6 @@ import com.vita.core.exception.ServiceException;
 import com.vita.log.interceptor.RequestTraceInterceptor;
 import jakarta.annotation.Resource;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,7 +41,7 @@ public class SaTokenConfigure implements WebMvcConfigurer {
     @Resource
     private StpLogic stpLogic;
 
-    @Autowired
+    @Resource
     private ObjectProvider<AuthExcludePathsProvider> authExcludePathsProviders;
 
     /**
@@ -85,6 +84,7 @@ public class SaTokenConfigure implements WebMvcConfigurer {
                 .addPathPatterns("/**");
 
         List<String> excludePaths = new ArrayList<>(authProperty.getExtraExcludePaths());
+        // 收集所有模块声明的免登录路径,由各模块自行实现 AuthExcludePathsProvider 接口并注册为 Spring Bean
         authExcludePathsProviders.orderedStream().forEach(provider -> excludePaths.addAll(provider.paths()));
         // 所有业务模块共用登录校验，模块专属授权规则由各模块自行追加。
         registry.addInterceptor(new RequestDispatchAuthInterceptor(new SaInterceptor(handle -> {

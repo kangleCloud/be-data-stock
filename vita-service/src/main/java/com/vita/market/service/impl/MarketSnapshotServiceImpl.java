@@ -6,12 +6,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vita.core.exception.GlobalErrorCode;
 import com.vita.core.exception.ServiceException;
+import com.vita.market.dto.MarketIndexConfigDto;
+import com.vita.market.service.MarketIndexConfigService;
 import com.vita.market.service.MarketSnapshotService;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -30,6 +33,13 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Shanghai");
     private static final List<String> MODULE_NAMES = List.of(
             "industrySectors", "conceptSectors", "marketFundFlow");
+    private static final Set<String> CORE_INDEX_CODES = Set.of(
+            "sh000001", "sz399001", "sh000300", "sz399006", "sh000688");
+    private static final Set<String> INDEX_DATA_FIELDS = Set.of("source", "sourceTime", "items");
+    private static final Set<String> INDEX_ITEM_FIELDS = Set.of("code", "name", "price", "change",
+            "changePercent", "previousClose", "open", "high", "low", "volume", "amount",
+            "sourceTime", "collectedAt", "series");
+    private static final Set<String> INDEX_POINT_FIELDS = Set.of("collectedAt", "price");
     private static final Set<String> STATUSES = Set.of("FRESH", "STALE", "ERROR");
     private static final Set<String> SECTOR_DATA_FIELDS = Set.of("source", "period", "items");
     private static final Set<String> SECTOR_ITEM_FIELDS = Set.of("code", "name", "type", "indexValue",
@@ -42,10 +52,13 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final MarketIndexConfigService indexConfigService;
 
-    public MarketSnapshotServiceImpl(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public MarketSnapshotServiceImpl(StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
+                                     MarketIndexConfigService indexConfigService) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.indexConfigService = indexConfigService;
     }
 
     @Override
@@ -60,10 +73,46 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
             JsonNode snapshot = objectMapper.readTree(raw);
             validate(snapshot);
             reconcile(snapshot);
+            if (snapshot.path("modules").has("coreIndices")) {
+                List<MarketIndexConfigDto> configs = indexConfigService.enabled();
+                JsonNode indexData = snapshot.path("modules").path("coreIndices").path("data");
+                if (indexData.isObject()) {
+                    ObjectNode data = (ObjectNode) indexData;
+                    com.fasterxml.jackson.databind.node.ArrayNode visible = objectMapper.createArrayNode();
+                    for (MarketIndexConfigDto config : configs) {
+                        for (JsonNode item : data.path("items")) {
+                            if (config.code().equals(item.path("code").textValue())) {
+                                visible.add(item);
+                                break;
+                            }
+                        }
+                    }
+                    data.set("items", visible);
+                }
+                String rawId = snapshot.path("snapshotId").textValue();
+                if (rawId != null) {
+                    ((ObjectNode) snapshot).put("snapshotId", publicSnapshotId(rawId, configs));
+                }
+            }
             return snapshot;
         } catch (JsonProcessingException | IllegalArgumentException exception) {
             throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "市场快照格式不正确");
         }
+    }
+
+    @Override
+    public String publicSnapshotId(String rawSnapshotId) {
+        if (rawSnapshotId == null) {
+            return null;
+        }
+        return publicSnapshotId(rawSnapshotId, indexConfigService.enabled());
+    }
+
+    private String publicSnapshotId(String rawSnapshotId, List<MarketIndexConfigDto> configs) {
+        String suffix = configs.stream().map(MarketIndexConfigDto::code)
+                .reduce("", (left, right) -> left + "," + right);
+        return UUID.nameUUIDFromBytes((rawSnapshotId + suffix).getBytes(StandardCharsets.UTF_8))
+                .toString().replace("-", "");
     }
 
     private void validate(JsonNode snapshot) {
@@ -79,11 +128,14 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
         }
 
         JsonNode modules = snapshot.path("modules");
-        if (!hasExactlyFields(modules, Set.copyOf(MODULE_NAMES))) {
+        Set<String> names = new java.util.HashSet<>();
+        modules.fieldNames().forEachRemaining(names::add);
+        if (!names.equals(Set.copyOf(MODULE_NAMES))
+                && !names.equals(Set.of("industrySectors", "conceptSectors", "marketFundFlow", "coreIndices"))) {
             // 旧榜单与东财字段不能混入 V1 新快照，避免页面误用不同来源口径。
             throw new IllegalArgumentException("市场快照模块集合不合法");
         }
-        for (String name : MODULE_NAMES) {
+        for (String name : names) {
             JsonNode module = modules.path(name);
             if (!module.isObject() || !module.path("status").isTextual()
                     || !STATUSES.contains(module.path("status").textValue())
@@ -111,10 +163,54 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
     }
 
     private boolean validData(String name, JsonNode data, String tradeDate) {
+        if ("coreIndices".equals(name)) {
+            return validIndexData(data, tradeDate);
+        }
         if (name.endsWith("Sectors")) {
             return validSectorData(name, data);
         }
         return validMarketData(data, tradeDate);
+    }
+
+    private boolean validIndexData(JsonNode data, String tradeDate) {
+        if (!data.isObject() || !hasExactlyFields(data, INDEX_DATA_FIELDS)
+                || !"SINA_INDEX".equals(data.path("source").textValue())
+                || !data.path("sourceTime").isNull() || !data.path("items").isArray()
+                || data.path("items").size() != CORE_INDEX_CODES.size()) {
+            return false;
+        }
+        Set<String> seen = new java.util.HashSet<>();
+        for (JsonNode item : data.path("items")) {
+            if (!item.isObject() || !hasExactlyFields(item, INDEX_ITEM_FIELDS)
+                    || !CORE_INDEX_CODES.contains(item.path("code").textValue())
+                    || !seen.add(item.path("code").textValue())
+                    || !item.path("name").isTextual() || item.path("name").textValue().isBlank()
+                    || !isFiniteNumber(item, "price") || item.path("price").decimalValue().signum() <= 0
+                    || !isNullableFiniteNumber(item, "change")
+                    || !isNullableFiniteNumber(item, "changePercent")
+                    || !isNullableFiniteNumber(item, "previousClose")
+                    || !isNullableFiniteNumber(item, "open") || !isNullableFiniteNumber(item, "high")
+                    || !isNullableFiniteNumber(item, "low") || !isNullableFiniteNumber(item, "volume")
+                    || !isNullableFiniteNumber(item, "amount") || !item.path("sourceTime").isNull()
+                    || !validCollectionTime(item.get("collectedAt"), tradeDate)
+                    || !item.path("series").isArray()) {
+                return false;
+            }
+            Instant previous = null;
+            for (JsonNode point : item.path("series")) {
+                if (!point.isObject() || !hasExactlyFields(point, INDEX_POINT_FIELDS)
+                        || !validCollectionTime(point.get("collectedAt"), tradeDate)
+                        || !isFiniteNumber(point, "price") || point.path("price").decimalValue().signum() <= 0) {
+                    return false;
+                }
+                Instant at = OffsetDateTime.parse(point.path("collectedAt").textValue()).toInstant();
+                if (previous != null && !at.isAfter(previous)) {
+                    return false;
+                }
+                previous = at;
+            }
+        }
+        return seen.equals(CORE_INDEX_CODES);
     }
 
     private boolean validSectorData(String moduleName, JsonNode data) {

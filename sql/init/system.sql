@@ -17,6 +17,132 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- ETF V1：仅保存字典、配置、资料和真实取得的资产配置；行情与曲线留在 Redis。
+DROP TABLE IF EXISTS `etf_symbol_dictionary`;
+CREATE TABLE `etf_symbol_dictionary` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
+  `symbol` varchar(16) NOT NULL COMMENT 'SH/SZ 前缀 ETF 标识',
+  `code` varchar(6) NOT NULL COMMENT '六位代码',
+  `name` varchar(100) NOT NULL COMMENT '基金名称',
+  `market` varchar(2) NOT NULL COMMENT 'SH/SZ',
+  `exchange` varchar(20) DEFAULT NULL COMMENT '交易所',
+  `etf_type` varchar(100) DEFAULT NULL COMMENT 'ETF 类型',
+  `listing_status` varchar(30) DEFAULT NULL COMMENT '上市状态',
+  `listing_date` date DEFAULT NULL COMMENT '上市日期',
+  `tracking_index_code` varchar(32) DEFAULT NULL COMMENT '已核实的跟踪指数代码',
+  `tracking_index_name` varchar(100) DEFAULT NULL COMMENT '已核实的跟踪指数名称',
+  `source` varchar(50) NOT NULL COMMENT '字典来源',
+  `synced_at` datetime DEFAULT NULL COMMENT '实际同步时间',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '逻辑删除',
+  `create_by_id` bigint DEFAULT NULL COMMENT '创建人ID',
+  `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
+  `update_by_id` bigint DEFAULT NULL COMMENT '更新人ID',
+  `update_by` varchar(50) DEFAULT NULL COMMENT '更新人',
+  `version` bigint DEFAULT 0 COMMENT '版本号',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_etf_symbol_dictionary_symbol` (`symbol`),
+  KEY `idx_etf_symbol_dictionary_code` (`code`),
+  KEY `idx_etf_symbol_dictionary_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='新浪 ETF 交易字典';
+
+DROP TABLE IF EXISTS `etf_monitor_config`;
+CREATE TABLE `etf_monitor_config` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
+  `symbol` varchar(16) NOT NULL COMMENT 'ETF 标识',
+  `enabled` tinyint(1) NOT NULL DEFAULT 0 COMMENT '启用',
+  `sort_order` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '逻辑删除',
+  `create_by_id` bigint DEFAULT NULL COMMENT '创建人ID',
+  `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
+  `update_by_id` bigint DEFAULT NULL COMMENT '更新人ID',
+  `update_by` varchar(50) DEFAULT NULL COMMENT '更新人',
+  `version` bigint DEFAULT 0 COMMENT '版本号',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_etf_monitor_config_symbol` (`symbol`),
+  KEY `idx_etf_monitor_config_enabled_sort` (`enabled`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='系统级 ETF 监控配置';
+
+DROP TABLE IF EXISTS `etf_monitor_profile`;
+CREATE TABLE `etf_monitor_profile` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
+  `symbol` varchar(16) NOT NULL COMMENT 'ETF 标识',
+  `exchange` varchar(20) DEFAULT NULL COMMENT '交易所',
+  `etf_type` varchar(100) DEFAULT NULL COMMENT 'ETF 类型',
+  `listing_status` varchar(30) DEFAULT NULL COMMENT '上市状态',
+  `listing_date` date DEFAULT NULL COMMENT '上市日期',
+  `manager` varchar(100) DEFAULT NULL COMMENT '基金管理人',
+  `custodian` varchar(100) DEFAULT NULL COMMENT '托管人',
+  `share_count` decimal(24,4) DEFAULT NULL COMMENT '份额 原值',
+  `share_date` date DEFAULT NULL COMMENT '份额数据日期',
+  `tracking_index_code` varchar(32) DEFAULT NULL COMMENT '已核实的跟踪指数代码',
+  `tracking_index_name` varchar(100) DEFAULT NULL COMMENT '已核实的跟踪指数名称',
+  `profile_updated_at` datetime DEFAULT NULL COMMENT '实际资料同步时间',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '逻辑删除',
+  `create_by_id` bigint DEFAULT NULL COMMENT '创建人ID',
+  `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
+  `update_by_id` bigint DEFAULT NULL COMMENT '更新人ID',
+  `update_by` varchar(50) DEFAULT NULL COMMENT '更新人',
+  `version` bigint DEFAULT 0 COMMENT '版本号',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_etf_monitor_profile_symbol` (`symbol`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='ETF 基础资料';
+
+DROP TABLE IF EXISTS `etf_asset_allocation_report`;
+CREATE TABLE `etf_asset_allocation_report` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
+  `symbol` varchar(16) NOT NULL COMMENT 'ETF 标识',
+  `requested_report_period` date NOT NULL COMMENT '请求报告期 非实际披露日',
+  `source` varchar(30) NOT NULL COMMENT 'XQ_DANJUAN',
+  `collected_at` datetime NOT NULL COMMENT '实际采集时间',
+  `categories_json` json NOT NULL COMMENT '真实资产类别及占比',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '逻辑删除',
+  `create_by_id` bigint DEFAULT NULL COMMENT '创建人ID',
+  `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
+  `update_by_id` bigint DEFAULT NULL COMMENT '更新人ID',
+  `update_by` varchar(50) DEFAULT NULL COMMENT '更新人',
+  `version` bigint DEFAULT 0 COMMENT '版本号',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_etf_asset_allocation_period` (`symbol`, `requested_report_period`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='ETF 真实资产类别占比报告';
+
+DROP TABLE IF EXISTS `market_index_config`;
+CREATE TABLE `market_index_config` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `tenant_id` bigint DEFAULT NULL COMMENT '租户ID',
+  `code` varchar(16) NOT NULL COMMENT '新浪指数代码',
+  `name` varchar(30) NOT NULL COMMENT '指数名称',
+  `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '启用',
+  `sort_order` int NOT NULL COMMENT '排序',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '逻辑删除',
+  `create_by_id` bigint DEFAULT NULL COMMENT '创建人ID',
+  `create_by` varchar(50) DEFAULT NULL COMMENT '创建人',
+  `update_by_id` bigint DEFAULT NULL COMMENT '更新人ID',
+  `update_by` varchar(50) DEFAULT NULL COMMENT '更新人',
+  `version` bigint DEFAULT 0 COMMENT '版本号',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_market_index_config_code` (`code`),
+  KEY `idx_market_index_config_enabled_sort` (`enabled`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='五核心指数显示配置';
+
+INSERT INTO `market_index_config` (`code`,`name`,`enabled`,`sort_order`)
+VALUES ('sh000001','上证指数',1,1),('sz399001','深证成指',1,2),
+       ('sh000300','沪深300',1,3),('sz399006','创业板指',1,4),('sh000688','科创50',1,5)
+ON DUPLICATE KEY UPDATE `is_deleted`=0;
+
 -- 个股监控 V1：字典来自交易所，配置和有限资料为系统级；报价及曲线仅存 Redis。
 DROP TABLE IF EXISTS `stock_symbol_dictionary`;
 CREATE TABLE `stock_symbol_dictionary` (

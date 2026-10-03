@@ -123,7 +123,8 @@ public class PythonJobsService {
     public enum JobKind {
         CALENDAR("calendar", Duration.ofSeconds(90)),
         MARKET("market", Duration.ofSeconds(1320)),
-        MONITOR("monitor", Duration.ofSeconds(360));
+        MONITOR("monitor", Duration.ofSeconds(360)),
+        ETF("etf", Duration.ofSeconds(360));
 
         private final String path;
         private final Duration readTimeout;

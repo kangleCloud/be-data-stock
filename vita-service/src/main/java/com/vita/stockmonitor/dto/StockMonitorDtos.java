@@ -45,7 +45,7 @@ public final class StockMonitorDtos {
                                String industry, String listingDate, BigDecimal marketCap, String updatedAt) {
     }
 
-    public record RefreshStatus(boolean accepted, String jobId, String status, String startedAt,
+    public record RefreshStatus(boolean accepted, String status, String startedAt,
                                 String finishedAt, String message) {
     }
 

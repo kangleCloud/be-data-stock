@@ -21,7 +21,10 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /** 交易所字典与最多 10 只选中股票资料的整体刷新。 */
 @Service
@@ -85,7 +88,7 @@ public class StockMonitorRefreshService {
         String token = redisLock.acquire(LOCK_KEY, Duration.ofMinutes(15));
         if (token == null) {
             StockMonitorDtos.RefreshStatus current = status();
-            return new StockMonitorDtos.RefreshStatus(false, current.jobId(), current.status(),
+            return new StockMonitorDtos.RefreshStatus(false, current.status(),
                     current.startedAt(), current.finishedAt(), "刷新任务正在执行");
         }
         try {
@@ -108,10 +111,9 @@ public class StockMonitorRefreshService {
     }
 
     private StockMonitorDtos.RefreshStatus executeLocked(RefreshScope scope) {
-        String jobId = UUID.randomUUID().toString();
         String startedAt = now();
         try {
-            writeStatus(new StockMonitorDtos.RefreshStatus(true, jobId, "RUNNING", startedAt, null, null));
+            writeStatus(new StockMonitorDtos.RefreshStatus(true, "RUNNING", startedAt, null, null));
             if (scope != RefreshScope.PROFILES) {
                 synchronizeDictionary(pythonClient.exchangeDictionary());
                 withConfigLock(monitorService::rebuildEnabledCache);
@@ -120,14 +122,14 @@ public class StockMonitorRefreshService {
                 refreshEnabledProfiles();
             }
             StockMonitorDtos.RefreshStatus result = new StockMonitorDtos.RefreshStatus(
-                    true, jobId, "SUCCESS", startedAt, now(), scope == RefreshScope.ALL ? null
+                    true, "SUCCESS", startedAt, now(), scope == RefreshScope.ALL ? null
                     : scope == RefreshScope.DICTIONARY ? "交易所字典刷新完成" : "已启用股票资料刷新完成");
             writeStatus(result);
             return result;
         } catch (Exception exception) {
             LOG.error("个股监控刷新失败", exception);
             StockMonitorDtos.RefreshStatus result = new StockMonitorDtos.RefreshStatus(
-                    true, jobId, "ERROR", startedAt, now(), "刷新失败，请检查服务日志");
+                    true, "ERROR", startedAt, now(), "刷新失败，请检查服务日志");
             writeStatus(result);
             return result;
         }
@@ -162,11 +164,17 @@ public class StockMonitorRefreshService {
     public StockMonitorDtos.RefreshStatus status() {
         String raw = redisTemplate.opsForValue().get(STATUS_KEY);
         if (raw == null) {
-            return new StockMonitorDtos.RefreshStatus(false, null, "IDLE", null, null, null);
+            return new StockMonitorDtos.RefreshStatus(false, "IDLE", null, null, null);
         }
         try {
-            return objectMapper.readValue(raw, StockMonitorDtos.RefreshStatus.class);
-        } catch (JsonProcessingException exception) {
+            com.fasterxml.jackson.databind.JsonNode value = objectMapper.readTree(raw);
+            if (!value.isObject() || !value.path("status").isTextual()) {
+                throw new IllegalArgumentException("状态格式错误");
+            }
+            return new StockMonitorDtos.RefreshStatus(value.path("accepted").asBoolean(false),
+                    value.path("status").asText(), value.path("startedAt").textValue(),
+                    value.path("finishedAt").textValue(), value.path("message").textValue());
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
             throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "刷新任务状态格式错误");
         }
     }

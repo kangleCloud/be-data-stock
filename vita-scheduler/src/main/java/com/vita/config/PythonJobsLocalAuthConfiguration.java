@@ -14,6 +14,7 @@ public class PythonJobsLocalAuthConfiguration {
         return () -> List.of(
                 "/local/python-jobs/v1/calendar/refresh",
                 "/local/python-jobs/v1/market/refresh",
-                "/local/python-jobs/v1/monitor/refresh");
+                "/local/python-jobs/v1/monitor/refresh",
+                "/local/python-jobs/v1/etf/refresh");
     }
 }

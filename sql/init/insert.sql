@@ -481,3 +481,150 @@ VALUES (7101, 0, 'DEPT_LEADER', '部门负责人', 'DEPARTMENT_LEADER',
 
 SET
 FOREIGN_KEY_CHECKS = 1;
+
+-- 系统菜单与精确权限；按实际系统根目录挂载，重复执行补缺并修正路由元数据。
+-- 前置条件：已有未删除的 /system CONTENTS 根目录；保留已有菜单的启停和可见性设置。
+SET @etf_system_menu_id := (SELECT `id` FROM `sys_menu`
+ WHERE `route_link`='/system' AND `menu_type`='CONTENTS' AND `is_deleted`=0
+ ORDER BY `id` LIMIT 1);
+SET @next_etf_menu_id := (SELECT COALESCE(MAX(`id`),0) FROM `sys_menu`);
+INSERT INTO `sys_menu` (`id`,`parent_id`,`menu_name`,`menu_type`,`route_name`,`route_link`,`component_path`,
+ `icon`,`sort_no`,`visible`,`is_cache`,`always_show`,`is_external`,`status`,`is_system`,
+ `is_deleted`,`tenant_id`,`create_time`,`create_by_id`,`create_by`,`update_time`,
+ `update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_menu_id := @next_etf_menu_id + 1, @etf_system_menu_id, 'ETF监控', 'MENU', 'EtfMonitor', '/system/etfMonitor',
+ 'system/etfMonitor/index', 'list', 17, 1,0,0,0,1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE (`route_name`='EtfMonitor' OR `route_link`='/system/etfMonitor') AND `is_deleted`=0);
+UPDATE `sys_menu` SET `parent_id`=@etf_system_menu_id, `menu_type`='MENU',
+ `route_name`='EtfMonitor', `route_link`='/system/etfMonitor', `component_path`='system/etfMonitor/index',
+ `is_external`=0, `update_time`=NOW()
+WHERE (`route_name`='EtfMonitor' OR `route_link`='/system/etfMonitor') AND `is_deleted`=0;
+INSERT INTO `sys_menu` (`id`,`parent_id`,`menu_name`,`menu_type`,`route_name`,`route_link`,`component_path`,
+ `icon`,`sort_no`,`visible`,`is_cache`,`always_show`,`is_external`,`status`,`is_system`,
+ `is_deleted`,`tenant_id`,`create_time`,`create_by_id`,`create_by`,`update_time`,
+ `update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_menu_id := @next_etf_menu_id + 1, @etf_system_menu_id, 'ETF字典', 'MENU', 'EtfDictionary', '/system/etfDictionary',
+ 'system/etfDictionary/index', 'list', 18, 1,0,0,0,1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE (`route_name`='EtfDictionary' OR `route_link`='/system/etfDictionary') AND `is_deleted`=0);
+UPDATE `sys_menu` SET `parent_id`=@etf_system_menu_id, `menu_type`='MENU',
+ `route_name`='EtfDictionary', `route_link`='/system/etfDictionary', `component_path`='system/etfDictionary/index',
+ `is_external`=0, `update_time`=NOW()
+WHERE (`route_name`='EtfDictionary' OR `route_link`='/system/etfDictionary') AND `is_deleted`=0;
+INSERT INTO `sys_menu` (`id`,`parent_id`,`menu_name`,`menu_type`,`route_name`,`route_link`,`component_path`,
+ `icon`,`sort_no`,`visible`,`is_cache`,`always_show`,`is_external`,`status`,`is_system`,
+ `is_deleted`,`tenant_id`,`create_time`,`create_by_id`,`create_by`,`update_time`,
+ `update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_menu_id := @next_etf_menu_id + 1, @etf_system_menu_id, 'ETF资料', 'MENU', 'EtfProfile', '/system/etfProfile',
+ 'system/etfProfile/index', 'list', 19, 1,0,0,0,1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE (`route_name`='EtfProfile' OR `route_link`='/system/etfProfile') AND `is_deleted`=0);
+UPDATE `sys_menu` SET `parent_id`=@etf_system_menu_id, `menu_type`='MENU',
+ `route_name`='EtfProfile', `route_link`='/system/etfProfile', `component_path`='system/etfProfile/index',
+ `is_external`=0, `update_time`=NOW()
+WHERE (`route_name`='EtfProfile' OR `route_link`='/system/etfProfile') AND `is_deleted`=0;
+INSERT INTO `sys_menu` (`id`,`parent_id`,`menu_name`,`menu_type`,`route_name`,`route_link`,`component_path`,
+ `icon`,`sort_no`,`visible`,`is_cache`,`always_show`,`is_external`,`status`,`is_system`,
+ `is_deleted`,`tenant_id`,`create_time`,`create_by_id`,`create_by`,`update_time`,
+ `update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_menu_id := @next_etf_menu_id + 1, @etf_system_menu_id, '核心指数配置', 'MENU', 'MarketIndexConfig', '/system/indexConfig',
+ 'system/indexConfig/index', 'list', 20, 1,0,0,0,1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE (`route_name`='MarketIndexConfig' OR `route_link`='/system/indexConfig') AND `is_deleted`=0);
+UPDATE `sys_menu` SET `parent_id`=@etf_system_menu_id, `menu_type`='MENU',
+ `route_name`='MarketIndexConfig', `route_link`='/system/indexConfig', `component_path`='system/indexConfig/index',
+ `is_external`=0, `update_time`=NOW()
+WHERE (`route_name`='MarketIndexConfig' OR `route_link`='/system/indexConfig') AND `is_deleted`=0;
+SET @next_etf_permission_id := (SELECT COALESCE(MAX(`id`),0) FROM `sys_permission`);
+INSERT INTO `sys_permission` (`id`,`permission_name`,`permission_code`,`permission_type`,`menu_id`,
+ `api_method`,`api_path`,`auth_tag`,`sort_no`,`status`,`is_system`,`is_deleted`,`tenant_id`,
+ `create_time`,`create_by_id`,`create_by`,`update_time`,`update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_permission_id := @next_etf_permission_id + 1, 'ETF监控查看', 'system:etf-monitor:view', 'MENU_ACTION',
+ (SELECT `id` FROM `sys_menu` WHERE `route_name`='EtfMonitor' AND `is_deleted`=0 LIMIT 1),
+ 'GET', '/system/etfMonitor/list', 'system:etf-monitor:view', 121, 1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_permission` WHERE `permission_code`='system:etf-monitor:view' AND `is_deleted`=0);
+UPDATE `sys_permission` SET `menu_id`=(SELECT `id` FROM `sys_menu`
+ WHERE `route_name`='EtfMonitor' AND `is_deleted`=0 ORDER BY `id` LIMIT 1),
+ `auth_tag`='system:etf-monitor:view', `api_method`='GET', `api_path`='/system/etfMonitor/list', `update_time`=NOW()
+WHERE `permission_code`='system:etf-monitor:view' AND `is_deleted`=0;
+INSERT INTO `sys_permission` (`id`,`permission_name`,`permission_code`,`permission_type`,`menu_id`,
+ `api_method`,`api_path`,`auth_tag`,`sort_no`,`status`,`is_system`,`is_deleted`,`tenant_id`,
+ `create_time`,`create_by_id`,`create_by`,`update_time`,`update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_permission_id := @next_etf_permission_id + 1, 'ETF监控修改', 'system:etf-monitor:update', 'MENU_ACTION',
+ (SELECT `id` FROM `sys_menu` WHERE `route_name`='EtfMonitor' AND `is_deleted`=0 LIMIT 1),
+ 'POST', '/system/etfMonitor/**', 'system:etf-monitor:update', 122, 1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_permission` WHERE `permission_code`='system:etf-monitor:update' AND `is_deleted`=0);
+UPDATE `sys_permission` SET `menu_id`=(SELECT `id` FROM `sys_menu`
+ WHERE `route_name`='EtfMonitor' AND `is_deleted`=0 ORDER BY `id` LIMIT 1),
+ `auth_tag`='system:etf-monitor:update', `api_method`='POST', `api_path`='/system/etfMonitor/**', `update_time`=NOW()
+WHERE `permission_code`='system:etf-monitor:update' AND `is_deleted`=0;
+INSERT INTO `sys_permission` (`id`,`permission_name`,`permission_code`,`permission_type`,`menu_id`,
+ `api_method`,`api_path`,`auth_tag`,`sort_no`,`status`,`is_system`,`is_deleted`,`tenant_id`,
+ `create_time`,`create_by_id`,`create_by`,`update_time`,`update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_permission_id := @next_etf_permission_id + 1, 'ETF监控刷新', 'system:etf-monitor:refresh', 'MENU_ACTION',
+ (SELECT `id` FROM `sys_menu` WHERE `route_name`='EtfMonitor' AND `is_deleted`=0 LIMIT 1),
+ 'POST', '/system/etfMonitor/**', 'system:etf-monitor:refresh', 123, 1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_permission` WHERE `permission_code`='system:etf-monitor:refresh' AND `is_deleted`=0);
+UPDATE `sys_permission` SET `menu_id`=(SELECT `id` FROM `sys_menu`
+ WHERE `route_name`='EtfMonitor' AND `is_deleted`=0 ORDER BY `id` LIMIT 1),
+ `auth_tag`='system:etf-monitor:refresh', `api_method`='POST', `api_path`='/system/etfMonitor/**', `update_time`=NOW()
+WHERE `permission_code`='system:etf-monitor:refresh' AND `is_deleted`=0;
+INSERT INTO `sys_permission` (`id`,`permission_name`,`permission_code`,`permission_type`,`menu_id`,
+ `api_method`,`api_path`,`auth_tag`,`sort_no`,`status`,`is_system`,`is_deleted`,`tenant_id`,
+ `create_time`,`create_by_id`,`create_by`,`update_time`,`update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_permission_id := @next_etf_permission_id + 1, 'ETF字典查看', 'system:etf-dictionary:view', 'MENU_ACTION',
+ (SELECT `id` FROM `sys_menu` WHERE `route_name`='EtfDictionary' AND `is_deleted`=0 LIMIT 1),
+ 'GET', '/system/etfDictionary/page', 'system:etf-dictionary:view', 124, 1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_permission` WHERE `permission_code`='system:etf-dictionary:view' AND `is_deleted`=0);
+UPDATE `sys_permission` SET `menu_id`=(SELECT `id` FROM `sys_menu`
+ WHERE `route_name`='EtfDictionary' AND `is_deleted`=0 ORDER BY `id` LIMIT 1),
+ `auth_tag`='system:etf-dictionary:view', `api_method`='GET', `api_path`='/system/etfDictionary/page', `update_time`=NOW()
+WHERE `permission_code`='system:etf-dictionary:view' AND `is_deleted`=0;
+INSERT INTO `sys_permission` (`id`,`permission_name`,`permission_code`,`permission_type`,`menu_id`,
+ `api_method`,`api_path`,`auth_tag`,`sort_no`,`status`,`is_system`,`is_deleted`,`tenant_id`,
+ `create_time`,`create_by_id`,`create_by`,`update_time`,`update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_permission_id := @next_etf_permission_id + 1, 'ETF资料查看', 'system:etf-profile:view', 'MENU_ACTION',
+ (SELECT `id` FROM `sys_menu` WHERE `route_name`='EtfProfile' AND `is_deleted`=0 LIMIT 1),
+ 'GET', '/system/etfProfile/**', 'system:etf-profile:view', 125, 1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_permission` WHERE `permission_code`='system:etf-profile:view' AND `is_deleted`=0);
+UPDATE `sys_permission` SET `menu_id`=(SELECT `id` FROM `sys_menu`
+ WHERE `route_name`='EtfProfile' AND `is_deleted`=0 ORDER BY `id` LIMIT 1),
+ `auth_tag`='system:etf-profile:view', `api_method`='GET', `api_path`='/system/etfProfile/**', `update_time`=NOW()
+WHERE `permission_code`='system:etf-profile:view' AND `is_deleted`=0;
+INSERT INTO `sys_permission` (`id`,`permission_name`,`permission_code`,`permission_type`,`menu_id`,
+ `api_method`,`api_path`,`auth_tag`,`sort_no`,`status`,`is_system`,`is_deleted`,`tenant_id`,
+ `create_time`,`create_by_id`,`create_by`,`update_time`,`update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_permission_id := @next_etf_permission_id + 1, '核心指数配置查看', 'system:index-config:view', 'MENU_ACTION',
+ (SELECT `id` FROM `sys_menu` WHERE `route_name`='MarketIndexConfig' AND `is_deleted`=0 LIMIT 1),
+ 'GET', '/system/indexConfig/list', 'system:index-config:view', 126, 1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_permission` WHERE `permission_code`='system:index-config:view' AND `is_deleted`=0);
+UPDATE `sys_permission` SET `menu_id`=(SELECT `id` FROM `sys_menu`
+ WHERE `route_name`='MarketIndexConfig' AND `is_deleted`=0 ORDER BY `id` LIMIT 1),
+ `auth_tag`='system:index-config:view', `api_method`='GET', `api_path`='/system/indexConfig/list', `update_time`=NOW()
+WHERE `permission_code`='system:index-config:view' AND `is_deleted`=0;
+INSERT INTO `sys_permission` (`id`,`permission_name`,`permission_code`,`permission_type`,`menu_id`,
+ `api_method`,`api_path`,`auth_tag`,`sort_no`,`status`,`is_system`,`is_deleted`,`tenant_id`,
+ `create_time`,`create_by_id`,`create_by`,`update_time`,`update_by_id`,`update_by`,`version`,`remark`)
+SELECT @next_etf_permission_id := @next_etf_permission_id + 1, '核心指数配置修改', 'system:index-config:update', 'MENU_ACTION',
+ (SELECT `id` FROM `sys_menu` WHERE `route_name`='MarketIndexConfig' AND `is_deleted`=0 LIMIT 1),
+ 'POST', '/system/indexConfig/update', 'system:index-config:update', 127, 1,1,0,0,NOW(),1,'system',NOW(),1,'system',0,'三大屏 V1'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_permission` WHERE `permission_code`='system:index-config:update' AND `is_deleted`=0);
+UPDATE `sys_permission` SET `menu_id`=(SELECT `id` FROM `sys_menu`
+ WHERE `route_name`='MarketIndexConfig' AND `is_deleted`=0 ORDER BY `id` LIMIT 1),
+ `auth_tag`='system:index-config:update', `api_method`='POST', `api_path`='/system/indexConfig/update', `update_time`=NOW()
+WHERE `permission_code`='system:index-config:update' AND `is_deleted`=0;
+SET @etf_super_admin_role_id := (SELECT `id` FROM `sys_role` WHERE `role_code`='SUPER_ADMIN' AND `is_deleted`=0 LIMIT 1);
+SET @next_etf_role_menu_id := (SELECT COALESCE(MAX(`id`),0) FROM `sys_role_menu`);
+INSERT INTO `sys_role_menu` (`id`,`role_id`,`menu_id`,`is_deleted`,`tenant_id`,`create_time`,
+ `create_by_id`,`create_by`,`update_time`,`update_by_id`,`update_by`,`version`)
+SELECT @next_etf_role_menu_id := @next_etf_role_menu_id + 1,
+ @etf_super_admin_role_id,m.`id`,0,0,NOW(),1,'system',NOW(),1,'system',0
+FROM `sys_menu` m WHERE @etf_super_admin_role_id IS NOT NULL
+ AND (m.`id`=@etf_system_menu_id OR m.`route_name` IN ('EtfMonitor','EtfDictionary','EtfProfile','MarketIndexConfig'))
+ AND m.`is_deleted`=0 AND NOT EXISTS (SELECT 1 FROM `sys_role_menu` rm
+ WHERE rm.`role_id`=@etf_super_admin_role_id AND rm.`menu_id`=m.`id` AND rm.`is_deleted`=0);
+SET @next_etf_role_permission_id := (SELECT COALESCE(MAX(`id`),0) FROM `sys_role_permission`);
+INSERT INTO `sys_role_permission` (`id`,`role_id`,`permission_id`,`is_deleted`,`tenant_id`,
+ `create_time`,`create_by_id`,`create_by`,`update_time`,`update_by_id`,`update_by`,`version`)
+SELECT @next_etf_role_permission_id := @next_etf_role_permission_id + 1,
+ @etf_super_admin_role_id,p.`id`,0,0,NOW(),1,'system',NOW(),1,'system',0
+FROM `sys_permission` p WHERE @etf_super_admin_role_id IS NOT NULL
+ AND p.`permission_code` IN ('system:etf-monitor:view','system:etf-monitor:update','system:etf-monitor:refresh','system:etf-dictionary:view','system:etf-profile:view','system:index-config:view','system:index-config:update' ) AND p.`is_deleted`=0 AND NOT EXISTS (SELECT 1 FROM `sys_role_permission` rp
+ WHERE rp.`role_id`=@etf_super_admin_role_id AND rp.`permission_id`=p.`id` AND rp.`is_deleted`=0);

@@ -52,6 +52,11 @@ public class PythonJobsLocalController {
         return refresh(request, JobKind.MONITOR);
     }
 
+    @PostMapping("/etf/refresh")
+    public CommonResult<PythonRunResult> refreshEtf(HttpServletRequest request) {
+        return refresh(request, JobKind.ETF);
+    }
+
     /**
      * 刷新指定类型的数据。
      *

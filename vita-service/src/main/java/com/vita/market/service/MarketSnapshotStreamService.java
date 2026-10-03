@@ -91,16 +91,27 @@ public class MarketSnapshotStreamService implements MessageListener {
             }
             try {
                 JsonNode notice = objectMapper.readTree(new String(message.getBody(), StandardCharsets.UTF_8));
+                if (notice != null && notice.path("resync").asBoolean(false)) {
+                    for (MarketStreamClient client : clients) {
+                        resync(client);
+                    }
+                    return;
+                }
                 JsonNode snapshot = snapshotService.getSnapshot();
                 String nextId = snapshot.path("snapshotId").textValue();
+                boolean hasIndices = snapshot.path("modules").has("coreIndices");
                 boolean valid = validNotice(notice) && nextId != null
-                        && nextId.equals(notice.path("snapshotId").textValue());
+                        && nextId.equals(hasIndices
+                        ? snapshotService.publicSnapshotId(notice.path("snapshotId").textValue())
+                        : notice.path("snapshotId").textValue());
                 for (MarketStreamClient client : clients) {
                     if (valid && !client.resyncRequired && nextId.equals(client.snapshotId)) {
                         continue;
                     }
+                    String previousRaw = notice.path("previousSnapshotId").textValue();
+                    String previousPublic = hasIndices ? snapshotService.publicSnapshotId(previousRaw) : previousRaw;
                     if (!valid || client.resyncRequired || client.snapshotId == null
-                            || !client.snapshotId.equals(notice.path("previousSnapshotId").textValue())) {
+                            || !client.snapshotId.equals(previousPublic)) {
                         resync(client);
                         continue;
                     }
@@ -145,7 +156,7 @@ public class MarketSnapshotStreamService implements MessageListener {
         if (previous == null || !(previous.isNull() || validId(previous.textValue()))) {
             return false;
         }
-        Set<String> names = Set.of("industrySectors", "conceptSectors", "marketFundFlow");
+        Set<String> names = Set.of("industrySectors", "conceptSectors", "marketFundFlow", "coreIndices");
         Set<String> seen = new java.util.HashSet<>();
         for (JsonNode name : notice.path("changedModules")) {
             if (!name.isTextual() || !names.contains(name.textValue()) || !seen.add(name.textValue())) {
