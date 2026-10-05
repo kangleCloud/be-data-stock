@@ -79,9 +79,7 @@ Redis 的 enabled 键缺失、重复 symbol 或其他格式错误返回业务 50
 
 ## 调度接口与 Python 内部接口
 
-`POST /scheduler/api/internal/stock-monitor/v1/refresh` 为受保护的整体刷新入口，空 JSON 请求，返回与管理端刷新相同的任务状态。每日任务在中国时区收盘后触发同一服务方法；Redis 锁 `stock:monitor:v1:refresh:lock` 防并发，任务状态键 `stock:monitor:v1:refresh:status` 保存上述状态，重复触发不并行。刷新先同步交易所股票字典，再对最多 10 只启用股票同步 profile。开关关闭时不得向 Python 提交任何雪球采集请求。
-
-供服务器本机 `curl` 的两个独立手动入口为 `POST /scheduler/api/local/stock-monitor/v1/dictionary/refresh` 和 `POST /scheduler/api/local/stock-monitor/v1/profiles/refresh`，均无需登录和请求令牌，但只接受 TCP 直连来源 `127.0.0.1` 或 `::1`，携带 `Forwarded`、`X-Forwarded-For` 或 `X-Real-IP` 的请求会被拒绝；网关不得转发外部请求到这两个路径。字典入口只同步交易所并重建 Redis 清单，资料入口只同步当前已启用股票资料；资料总闸关闭时返回 503 且不访问雪球。两入口与定时刷新共用锁和状态，分别有 10 分钟、30 分钟的重触发间隔；缓存重建和资料落库还与管理端启停共用配置锁。现有带令牌整体刷新入口不变。Java 到 Python 的内部调用继续携带 `X-Internal-Token`。
+每日定时任务与管理端整体刷新继续调用同一 Service：先同步交易所股票字典，再在雪球总闸开启时同步最多 10 只启用股票资料；共用 Redis 刷新锁与状态键。scheduler 已移除旧内部令牌整体入口及原本机手动入口，只提供 `POST /scheduler/api/local/market-data/v1/stock/dictionary/refresh`、`/stock/profiles/refresh`、`/stock/quotes/refresh` 等八个固定入口，详见 [本机刷新契约](../docs/development/python-jobs-local-api.md)。字典/资料仍分别保留 10/30 分钟间隔和配置锁，资料总闸关闭时拒绝源请求。入站只允许真实回环直连且拒绝转发头，Java→Python 继续携带 `X-Internal-Token`。
 
 Java 调用 Python 内部端点（服务地址由 `vita.stock-monitor.python-base-url` 配置）：
 

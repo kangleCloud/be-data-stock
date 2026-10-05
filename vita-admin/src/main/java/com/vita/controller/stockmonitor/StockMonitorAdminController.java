@@ -3,10 +3,10 @@ package com.vita.controller.stockmonitor;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.vita.core.CommonResult;
 import com.vita.core.page.PageResponse;
-import com.vita.stockmonitor.dto.StockMonitorDtos;
-import com.vita.stockmonitor.dto.StockMonitorPageQuery;
-import com.vita.stockmonitor.service.StockMonitorRefreshService;
-import com.vita.stockmonitor.service.StockMonitorService;
+import com.vita.marketdata.stockmonitor.dto.StockMonitorDtos;
+import com.vita.marketdata.stockmonitor.dto.StockMonitorPageQuery;
+import com.vita.marketdata.stockmonitor.service.StockMonitorRefreshService;
+import com.vita.marketdata.stockmonitor.service.StockMonitorService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 

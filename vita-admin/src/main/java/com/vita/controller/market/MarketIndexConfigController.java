@@ -2,9 +2,9 @@ package com.vita.controller.market;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.vita.core.CommonResult;
-import com.vita.market.dto.MarketIndexConfigDto;
-import com.vita.market.dto.MarketIndexUpdateRequest;
-import com.vita.market.service.MarketIndexConfigService;
+import com.vita.marketdata.market.dto.MarketIndexConfigDto;
+import com.vita.marketdata.market.dto.MarketIndexUpdateRequest;
+import com.vita.marketdata.market.service.MarketIndexConfigService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;

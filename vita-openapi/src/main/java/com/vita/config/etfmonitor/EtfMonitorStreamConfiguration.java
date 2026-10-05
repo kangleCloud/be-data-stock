@@ -1,6 +1,7 @@
 package com.vita.config.etfmonitor;
 
-import com.vita.etfmonitor.service.EtfMonitorStreamService;
+import com.vita.marketdata.etfmonitor.constant.EtfMonitorConstants;
+import com.vita.marketdata.etfmonitor.service.EtfMonitorStreamService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -14,7 +15,7 @@ public class EtfMonitorStreamConfiguration {
             RedisConnectionFactory connectionFactory, EtfMonitorStreamService streamService) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
-        container.addMessageListener(streamService, new ChannelTopic("stock:etf-monitor:v1:updates"));
+        container.addMessageListener(streamService, new ChannelTopic(EtfMonitorConstants.UPDATES_CHANNEL));
         return container;
     }
 }
