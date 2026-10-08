@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="60 seconds">
+
+    <property name="LOG_PATTERN"
+              value="【%level】%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %logger{50} - [%method,%line] - %X{requestId} - %msg%n"/>
+
+    <!-- 应用仅输出控制台，由 YAML 选择此配置，生产日志由 systemd service 接管，避免重复写文件。 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <logger name="com.vita" level="INFO"/>
+    <logger name="org.springframework" level="WARN"/>
+
+    <!-- 审计摘要输出到同一控制台，关闭向 root 传播以免重复输出。 -->
+    <logger name="sys-access" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
