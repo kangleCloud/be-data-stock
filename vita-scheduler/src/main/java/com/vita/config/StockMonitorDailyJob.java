@@ -1,6 +1,7 @@
 package com.vita.config;
 
-import com.vita.stockmonitor.service.StockMonitorRefreshService;
+import com.vita.marketdata.constant.MarketDataConstants;
+import com.vita.marketdata.stockmonitor.service.StockMonitorRefreshService;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,7 +16,7 @@ public class StockMonitorDailyJob {
         this.refreshService = refreshService;
     }
 
-    @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Shanghai")
+    @Scheduled(cron = "0 30 16 * * MON-FRI", zone = MarketDataConstants.SHANGHAI_ZONE_ID)
     public void refresh() {
         refreshService.refresh();
     }

@@ -6,11 +6,11 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
-/** 仅个股监控大屏 GET 路径匿名可读。 */
+/** 仅个股监控大屏 GET 与 SSE 的精确路径匿名可读。 */
 @Configuration
 public class StockMonitorPublicAuthConfiguration {
     @Bean
     public AuthExcludePathsProvider stockMonitorPublicPaths() {
-        return () -> List.of("/stock-monitor/v1/dashboard");
+        return () -> List.of("/stock-monitor/v1/dashboard", "/stock-monitor/v1/stream");
     }
 }

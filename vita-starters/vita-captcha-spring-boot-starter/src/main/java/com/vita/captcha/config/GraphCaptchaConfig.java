@@ -4,8 +4,8 @@ import com.google.code.kaptcha.impl.DefaultKaptcha;
 import com.google.code.kaptcha.util.Config;
 import com.vita.captcha.kaptcha.SquareKaptcha;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Properties;
@@ -22,7 +22,7 @@ import static com.google.code.kaptcha.Constants.*;
  */
 @Configuration
 @ConditionalOnProperty(prefix = "vita.captcha", name = "enabled", havingValue = "true")
-@Conditional(CaptchaTypeCondition.GraphTypeCondition.class)
+@Conditional(GraphCaptchaTypeCondition.class)
 public class GraphCaptchaConfig {
     /**
      * 字符型验证码bean

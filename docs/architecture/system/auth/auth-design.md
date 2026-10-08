@@ -788,4 +788,4 @@ Sa-Token 注解鉴权在路由登录校验前执行。`SaTokenExceptionHandler` 
 
 ## 13.2 公开市场快照认证边界
 
-`vita-openapi/src/main/resources/application.yml` 仅将 `/market/dashboard/snapshot` 与 `/market/dashboard/stream` 两个精确路径加入该应用的 `vita.auth.extra-exclude-paths`。两者仅提供 GET，对外路径以 `/openapi/api` 为上下文前缀。其他 OpenAPI 路径继续由 `SaTokenConfigure` 登录拦截器校验；`vita-admin` 的排除列表不包含市场快照路径，也不再注册市场快照 Controller。不得通过通配符放行 `/market/**` 或将这两个路径加入共享应用配置。
+`vita-openapi` 通过精确排除路径公开市场 `/market/dashboard/snapshot`、`/market/dashboard/stream` 和个股 `/stock-monitor/v1/dashboard`、`/stock-monitor/v1/stream`，四者仅提供 GET，对外路径以 `/openapi/api` 为上下文前缀。其他 OpenAPI 路径继续由 `SaTokenConfigure` 登录拦截器校验；`vita-admin` 的排除列表不包含市场快照路径，也不注册市场快照 Controller。不得使用 `/market/**`、`/stock-monitor/**` 等通配符放行。

@@ -68,27 +68,6 @@ public class SlideCaptchaUtils {
     }
 
     /**
-     * 背景图资源。
-     */
-    public static final class BackgroundResource {
-        private final BufferedImage bufferedImage;
-        private final String accessUrl;
-
-        public BackgroundResource(BufferedImage bufferedImage, String accessUrl) {
-            this.bufferedImage = bufferedImage;
-            this.accessUrl = accessUrl;
-        }
-
-        public BufferedImage getBufferedImage() {
-            return bufferedImage;
-        }
-
-        public String getAccessUrl() {
-            return accessUrl;
-        }
-    }
-
-    /**
      * 获取指定范围内的随机数
      **/
     public static int getNonceByRange(int start, int end) {

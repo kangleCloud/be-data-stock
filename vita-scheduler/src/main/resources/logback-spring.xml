@@ -5,8 +5,8 @@
     <property name="LOG_PATTERN"
               value="【%level】%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %logger{50} - [%method,%line] - %X{requestId} - %msg%n"/>
 
-    <!-- Maven 本地启动时工作目录固定为仓库根目录；部署时允许显式覆盖 -->
-    <property name="LOG_HOME" value="${VITA_LOG_HOME:-./data/logs/be-vita}"/>
+    <!-- 文件日志模式：目录相对于启动工作目录，Maven 本地启动固定为仓库根目录。 -->
+    <property name="LOG_HOME" value="./home/logs/"/>
 
     <!-- 控制台日志 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -99,6 +99,7 @@
 
     <!-- 访问 / 审计日志独立输出，避免重复写入 root -->
     <logger name="sys-access" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
         <appender-ref ref="ASYNC_FILE_ACCESS"/>
     </logger>
 

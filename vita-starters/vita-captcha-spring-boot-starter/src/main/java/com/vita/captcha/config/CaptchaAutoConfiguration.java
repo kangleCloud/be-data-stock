@@ -1,16 +1,15 @@
 package com.vita.captcha.config;
 
 import com.google.code.kaptcha.Producer;
-import com.vita.captcha.common.enums.CaptchaTypeEnum;
 import com.vita.captcha.config.property.CaptchaProperty;
 import com.vita.captcha.service.CaptchaApplicationService;
 import com.vita.captcha.service.GraphCaptchaServiceImpl;
 import com.vita.captcha.service.ICaptchaService;
 import com.vita.captcha.service.SlideCaptchaServiceImpl;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
@@ -44,7 +43,7 @@ public class CaptchaAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean(SlideCaptchaServiceImpl.class)
-    @Conditional(CaptchaTypeCondition.SlideTypeCondition.class)
+    @Conditional(SlideCaptchaTypeCondition.class)
     public SlideCaptchaServiceImpl slideCaptchaService(CaptchaProperty captchaProperty) {
         return new SlideCaptchaServiceImpl(captchaProperty);
     }
@@ -54,7 +53,7 @@ public class CaptchaAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean({GraphCaptchaServiceImpl.class})
-    @Conditional(CaptchaTypeCondition.GraphTypeCondition.class)
+    @Conditional(GraphCaptchaTypeCondition.class)
     public GraphCaptchaServiceImpl graphCaptchaService(CaptchaProperty captchaProperty,
                                                        @Qualifier("captchaProducer") Producer captchaProducer,
                                                        @Qualifier("captchaProducerMath") Producer captchaProducerMath) {

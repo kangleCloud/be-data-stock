@@ -14,12 +14,10 @@
 
 当前仓库已经具备以下基础能力：
 
-- `vita-admin`、`vita-openapi`、`vita-scheduler` 分别通过模块内的 `logback-spring.xml` 输出三类日志文件：
-  - 普通运行日志：`vita-<app>.log`
-  - 错误日志：`vita-<app>-error.log`
-  - 访问与审计日志：`vita-<app>-access.log`
-- Maven 本地启动时，三个应用的工作目录统一固定为仓库根目录，日志默认写入 `data/logs/be-vita/`。
-- 部署环境可通过 `VITA_LOG_HOME` 指定其他日志目录；未配置时仍使用启动工作目录下的 `data/logs/be-vita/`。
+- `vita-admin`、`vita-openapi`、`vita-scheduler` 通过各 profile YAML 的 `logging.config` 选择日志配置。
+- dev 默认 `classpath:logback-spring.xml`：控制台及普通、错误、访问三类文件日志，目录为启动工作目录下的 `data/logs/be-vita/`。
+- prod 默认公共模块的 `classpath:logback-console.xml`：仅控制台，由 systemd service 指定的日志配置接管。
+- 日志模式由配置值决定，不自动识别本地或 JAR 启动；`VITA_LOG_HOME` 不再用于应用日志配置。
 - `vita-common/src/main/java/com/vita/log/aspect/LogAspect.java` 已存在切面骨架，已引入：
   - `@Around`
   - `MDC`
@@ -39,7 +37,7 @@
 1. `logback-spring.xml` 输出的是 `%X{requestId}`，但 `LogAspect` 当前写入 MDC 的键是 `LOG_ID`，链路标识不一致。
 2. `LogAspect` 目前只完成了部分准备动作，尚未真正完成注解读取、结果处理、异常捕获、`sysOperLog` 构造和落库。
 3. `LoginUserInfoModelContext`、MDC、切面内部 `ThreadLocal` 的清理职责还没有明确边界。
-4. 普通运行日志当前会接收 `ERROR` 日志，和错误日志重复落盘。
+4. 文件模式的普通日志必须排除 ERROR，避免与错误文件重复落盘。
 5. 项目已经有 `sysOperLog` 实体和服务，但还没有和切面形成统一落库闭环。
 6. 轻量化日志规则未固化，参数脱敏和大字段处理口径还不统一。
 
@@ -47,15 +45,17 @@
 
 ### 4.1 统一日志结构
 
-三个启动模块在所有环境中均保留三类文件日志，并继续输出控制台日志：
+三个启动模块的两种日志模式保留同一格式、级别和 `requestId`：
 
-| 日志文件 | 用途 | 生产方式 |
+| 日志类别 | 用途 | 生产方式 |
 | --- | --- | --- |
-| `vita-<app>.log` | 普通运行日志 | `@Slf4j` / `Logger` |
-| `vita-<app>-error.log` | 异常和错误日志 | 全局异常处理、切面异常日志 |
-| `vita-<app>-access.log` | 控制器访问审计日志 | `sys-access` Logger |
+| 普通运行日志 | 运行与业务诊断 | `@Slf4j` / `Logger` |
+| 异常和错误日志 | 故障排查 | 全局异常处理、切面异常日志 |
+| 控制器访问审计日志 | 访问审计摘要 | `sys-access` Logger |
 
-默认目录为仓库根目录或部署启动目录下的 `data/logs/be-vita/`。Maven 本地启动通过 Spring Boot Maven Plugin 的 `workingDirectory` 固定到仓库根目录，避免在 `vita-admin`、`vita-openapi`、`vita-scheduler` 模块下分别生成 `data/`。生产部署应通过 `VITA_LOG_HOME` 配置绝对目录。
+文件模式的 `root` 引用控制台及普通／错误文件 Appender，普通文件排除 ERROR，错误文件只收 ERROR；`sys-access` 引用控制台和独立访问文件，设置 `additivity=false`，每个输出目标各接收一次。保留 128MB 分卷、普通／访问 30 天、错误 60 天和各 10GB 上限的原滚动策略。
+
+控制台模式的 `root` 和 `sys-access` 只引用控制台，访问摘要不重复输出，也不初始化文件 Appender 或创建日志目录。生产 systemd service 沿用现有标准输出／标准错误处理及日志保留配置。
 
 ### 4.2 复用现有业务模块
 
@@ -75,7 +75,7 @@
 - 默认不记录完整响应体
 - 默认不记录文件流、二进制流、请求/响应原始对象
 - 审计日志落库只保存必要字段
-- 同一类错误不重复在多个文件中输出完整堆栈
+- 同一类错误不重复输出完整堆栈
 
 ## 5. 职责划分
 
@@ -108,7 +108,7 @@
 8. 捕获异常并生成失败日志
 9. 计算耗时
 10. 构造 `sysOperLog`
-11. 在非生产环境输出 `sys-access.log`，在生产环境输出到控制台日志流
+11. 按日志配置输出 `sys-access` 摘要：文件模式写入 `vita-<app>-access.log` 并输出控制台，控制台模式只输出控制台
 12. 调用 `IsysOperLogService.save(sysOperLog)` 完成落库
 
 设计要求：
@@ -265,7 +265,7 @@ execution(public * com.vita..controller..*Controller.*(..))
 - 读取 `@Log`
 - 调用 `LogUtils`
 - 调用 `IsysOperLogService.save(sysOperLog)`
-- 使用 `LoggerFactory.getLogger("sys-access")` 写审计文件日志
+- 使用 `LoggerFactory.getLogger("sys-access")` 输出审计日志摘要
 
 建议结构：
 
@@ -319,11 +319,11 @@ public void clearThreadLocal()
 结合三个启动模块当前的 `logback-spring.xml`，建议补充以下优化：
 
 1. 将项目 logger 从 `com.xxx.project` 调整为 `com.vita`
-2. 普通运行日志增加 `ERROR` 拒绝过滤，避免和错误日志重复
+2. 文件模式按普通／错误分类输出，控制台模式不初始化文件 Appender
 3. 审计日志统一写入 `sys-access` logger
 4. MDC 键统一为 `requestId`，不要再使用 `LOG_ID`
 5. 补齐 `spring-boot-starter-aop` 依赖，确保切面能力完整生效
-6. 文件日志通过 `AsyncAppender` 包装 `RollingFileAppender`，并开启 `neverBlock=true`
+6. 文件模式沿用异步 Appender 和滚动器；生产选择控制台模式，由 systemd 接管日志
 7. 非核心日志异步统一走默认线程池，不再拆分操作日志、登录审计、地理位置补全的独立线程池
 8. 登录地点查询只允许走缓存或异步补全，不在请求线程内同步调用外部 IP 服务
 
@@ -336,8 +336,8 @@ public void clearThreadLocal()
 5. 增加 `LogAspect @After` 清理切面私有 `ThreadLocal`
 6. 增加过滤器或拦截器，统一清理 `LoginUserInfoModelContext`、MDC 和请求级 ThreadLocal
 7. 对接现有 `IsysOperLogService` 完成审计日志落库
-8. 验证三个启动模块的普通、错误、访问日志均写入根目录 `data/logs/be-vita/`
-9. 验证设置 `VITA_LOG_HOME` 后，全部文件日志写入指定目录
+8. 验证三个模块的文件模式产生三类日志，审计摘要每个目标只输出一次
+9. 验证 prod 默认控制台模式不创建日志文件，本地 prod 手动切换文件模式有效
 
 ## 13. 验收标准
 
@@ -346,21 +346,30 @@ public void clearThreadLocal()
 - `requestId` 在业务日志和审计日志中可串联
 - `sysOperLog` 直接复用现有实体和服务，不引入新表结构
 - 审计日志默认轻量化输出，不记录完整大对象和敏感信息
-- `vita-<app>-access.log` 与数据库审计记录内容口径一致，均为摘要信息
+- 控制台访问审计日志与数据库审计记录内容口径一致，均为摘要信息
 - 登录主链路不再等待外部 IP 归属地 HTTP 请求
 - 非核心日志异步统一走默认线程池
-- Maven 本地启动不会在任一应用模块目录下生成 `data/`，日志统一写入仓库根目录 `data/logs/be-vita/`
-- 设置 `VITA_LOG_HOME` 后，Logback 文件日志仅写入指定目录
+- 控制台模式不创建日志文件或日志目录，文件模式按原策略滚动日志
+- 控制台审计日志每条输出一次
 
-## 14. 生产部署日志约定
+## 14. YAML 日志模式与生产部署
 
-- 生产部署必须显式启用 `prod` profile，并通过 `VITA_LOG_HOME` 指定绝对日志目录。
-- Logback 文件日志由应用自身滚动；控制台输出由进程管理器单独接管，避免写入 `nohup.out`。
-- `nohup` 启动示例：
+三个启动模块的 `application-dev.yml` 默认：
 
-```bash
-VITA_LOG_HOME=/data/logs/be-vita nohup java -jar vita-admin.jar --spring.profiles.active=prod >> /data/logs/be-vita/vita-admin-console.log 2>&1 < /dev/null &
+```yaml
+logging:
+  config: classpath:logback-spring.xml
 ```
 
-- `supervisor` 必须显式注入 `VITA_LOG_HOME`，并为 `stdout_logfile`、`stderr_logfile` 配置绝对路径。
-- Logback 管理 `vita-<app>.log`、`vita-<app>-error.log`、`vita-<app>-access.log` 的滚动；进程管理器只负责控制台日志轮转。
+`application-prod.yml` 默认：
+
+```yaml
+logging:
+  config: classpath:logback-console.xml
+```
+
+- 本地使用 prod 且需要保存文件时，将本机 `application-prod.yml` 中的 `logging.config` 改为 `classpath:logback-spring.xml`；切回控制台模式则改为 `classpath:logback-console.xml`。同一配置值在本地和生产行为一致。
+- profile YAML 保持 Git 忽略，上述示例是可跟踪的配置说明，不包含私有值。
+- 生产通过 systemd service 管理 JAR，显式启用 prod，确认实际加载的 prod YAML 选择控制台模式，日志位置和轮转由 service 现有配置接管。
+- 若启动命令已显式指定 `--logging.config`，该参数会覆盖 YAML；采用 YAML 切换时应移除冲突的启动参数。
+- 不增加环境变量占位符、布尔开关、Java 初始化逻辑或条件处理依赖。重新构建并重启应用后生效；本次不修改或重启生产 service。

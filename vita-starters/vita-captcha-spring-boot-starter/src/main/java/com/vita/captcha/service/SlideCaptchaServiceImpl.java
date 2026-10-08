@@ -4,6 +4,7 @@ import com.vita.captcha.common.enums.CaptchaTypeEnum;
 import com.vita.captcha.config.property.CaptchaProperty;
 import com.vita.captcha.dto.CaptchaRequestDto;
 import com.vita.captcha.dto.SlideCaptchaRequestDto;
+import com.vita.captcha.utils.BackgroundResource;
 import com.vita.captcha.utils.CaptchaUtils;
 import com.vita.captcha.utils.SlideCaptchaUtils;
 import com.vita.captcha.vo.CaptchaBasicResponseVo;
@@ -52,7 +53,7 @@ public class SlideCaptchaServiceImpl implements ICaptchaService {
             captchaRequestDto.setSlideCaptcha(slideCaptchaRequestDto);
         }
         SlideCaptchaUtils.checkCaptcha(captchaProperty, slideCaptchaRequestDto);
-        SlideCaptchaUtils.BackgroundResource backgroundResource = SlideCaptchaUtils.resolveBackground(captchaProperty.getSlide());
+        BackgroundResource backgroundResource = SlideCaptchaUtils.resolveBackground(captchaProperty.getSlide());
         BufferedImage canvasImage = SlideCaptchaUtils.imageResize(backgroundResource.getBufferedImage(),
                 slideCaptchaRequestDto.getCanvasWidth(),
                 slideCaptchaRequestDto.getCanvasHeight());

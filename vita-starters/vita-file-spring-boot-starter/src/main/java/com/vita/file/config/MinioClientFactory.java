@@ -10,7 +10,6 @@ import com.vita.file.support.FileUrlSupport;
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -221,27 +220,4 @@ public class MinioClientFactory {
         return accessKey.substring(0, 3) + "***" + accessKey.substring(accessKey.length() - 3);
     }
 
-    @Getter
-    public static class MinioClientContext {
-        private final ResolvedMinioConfig config;
-        private final VitaMinioClient uploadClient;
-        private final VitaMinioClient signClient;
-        private volatile boolean bucketReady;
-
-        public MinioClientContext(ResolvedMinioConfig config,
-                                  VitaMinioClient uploadClient,
-                                  VitaMinioClient signClient) {
-            this.config = config;
-            this.uploadClient = uploadClient;
-            this.signClient = signClient;
-        }
-
-        public boolean isBucketReady() {
-            return bucketReady;
-        }
-
-        public void setBucketReady(boolean bucketReady) {
-            this.bucketReady = bucketReady;
-        }
-    }
 }

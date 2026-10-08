@@ -27,8 +27,8 @@
 ## 统一技术基线
 
 - Java 实现必须兼容 JDK 17 及仓库现有 Maven、Spring Boot 依赖基线，未经任务明确要求不得升级基础技术栈。
-- Spring Boot 业务配置必须由各启动模块 profile 配置文件映射到 `vita.*` 命名空间，再由领域级独立 `*Property` 类使用 `@ConfigurationProperties` 绑定；业务类不得直接以 `@Value("${ENV_NAME}")` 读取大写环境变量。
-- 敏感配置仅在 profile 文件中引用环境变量占位符，并提供不含真实凭据的可跟踪模板；`application*.yml` 按 `.gitignore` 保持本机配置，不强制纳入版本控制。缺失的个股监控令牌不得放开内部接口，雪球采集开关默认关闭。
+- Spring Boot 业务配置必须直接写在各启动模块 profile 配置文件的 `vita.*` 命名空间中，再由领域级独立 `*Property` 类使用 `@ConfigurationProperties` 绑定；业务类不得直接读取大写环境变量。
+- `application-*.yml` 不使用 `${ENV_VARIABLE}` 注入系统配置。敏感配置只在本机忽略的 profile 文件中填写实际值，并提供不含真实凭据的可跟踪模板；`application*.yml` 按 `.gitignore` 保持本机配置，不强制纳入版本控制。缺失的个股监控令牌不得放开内部接口，生产雪球采集开关默认关闭。
 - Web 返回体必须使用 `CommonResult<T>`。
 - 分页请求必须使用 `PageRequest`，分页响应必须使用 `PageResponse<T>`。
 - MyBatis-Plus 查询必须优先使用 `BaseMapperX` 与 `LambdaQueryWrapperX`。
@@ -42,6 +42,7 @@
 - 源码文件必须使用 UTF-8；Java 代码使用 4 空格缩进，并遵循目标文件已有的导入、注解和空行风格。
 - 未经任务明确要求，不得批量格式化无关代码或引入新的格式化工具。
 - 类名使用 `PascalCase`，方法名和字段名使用 `camelCase`，常量使用 `UPPER_SNAKE_CASE`，包名必须全小写。
+- 禁止在 Java 类型或方法内部声明命名类，包括 `static class`；需要辅助类时单独创建顶层 `.java` 文件。根 Maven `validate` 阶段运行 `tools/checks/no_nested_classes.py`，扫描全部 `vita-*/src/main/java` 与 `src/test/java`。
 - 类型后缀必须保持一致：`*Controller`、`*Service`、`*ServiceImpl`、`*Mapper`、`*CreateDto`、`*UpdateDto`、`*SearchDto`、`*DetailVo`、`*ListVo`、`*PageVo`、`*OptionVo`、`*Property`。
 - 配置类必须放在领域级 `property` 包中，使用单数 `XxxProperty` 命名；不得新增 `*Properties`，也不得将配置字段散落到 `config`、`service` 或 `support` 中。
 

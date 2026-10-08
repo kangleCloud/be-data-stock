@@ -74,7 +74,7 @@ vita-scheduler -> vita-service -> vita-common
 - 初始化数据：`sql/init/insert.sql`
 - App 认证初始化：`sql/init/app.sql`
 - 升级脚本：`sql/upgrade/`
-- 运行日志：`data/logs/be-vita/`；可通过环境变量 `VITA_LOG_HOME` 覆盖。
+- 运行日志：profile YAML 的 `logging.config` 选择日志模式；dev 默认写入 `data/logs/be-vita/` 并输出控制台，prod 默认仅控制台，由 systemd service 接管。详见系统日志设计文档。
 
 ## 常用命令
 

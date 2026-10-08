@@ -1,9 +1,7 @@
 package com.vita.captcha.config;
 
 import com.vita.captcha.common.enums.CaptchaTypeEnum;
-import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
-import org.springframework.core.type.AnnotatedTypeMetadata;
 
 /**
  * 验证码类型条件判断。
@@ -17,27 +15,7 @@ public final class CaptchaTypeCondition {
     private CaptchaTypeCondition() {
     }
 
-    private static String getCaptchaType(ConditionContext context) {
+    static String getCaptchaType(ConditionContext context) {
         return CaptchaTypeEnum.normalize(context.getEnvironment().getProperty(CAPTCHA_TYPE_PROPERTY));
-    }
-
-    /**
-     * 图形验证码条件。
-     */
-    public static class GraphTypeCondition implements Condition {
-        @Override
-        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-            return CaptchaTypeEnum.isGraphType(getCaptchaType(context));
-        }
-    }
-
-    /**
-     * 滑动验证码条件。
-     */
-    public static class SlideTypeCondition implements Condition {
-        @Override
-        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-            return CaptchaTypeEnum.isSlideType(getCaptchaType(context));
-        }
     }
 }
