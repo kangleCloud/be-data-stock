@@ -344,7 +344,9 @@ public class StockMonitorServiceImpl implements StockMonitorService {
     private StockMonitorDtos.Dashboard buildDashboard(String stateId) {
         List<StockMonitorDtos.DictionaryItem> enabled = readEnabledCache();
         String tradeDate = xqEnabled ? validTradeDate(redisTemplate.opsForValue().get(StockMonitorConstants.LAST_TRADE_DATE_KEY)) : null;
-        String fundDate = xqEnabled ? readMarketFundDate() : null;
+        JsonNode fundModule = xqEnabled ? readMarketFundModule() : objectMapper.missingNode();
+        String fundDate = fundModule.path("data").isObject()
+                ? validTradeDate(fundModule.path("tradeDate").asText(null)) : null;
         String today = LocalDate.now(MarketDataConstants.SHANGHAI).toString();
         Map<String, StockMonitorProfile> profiles = xqEnabled
                 ? profileBySymbol(enabled.stream().map(StockMonitorDtos.DictionaryItem::symbol).toList())
@@ -381,9 +383,14 @@ public class StockMonitorServiceImpl implements StockMonitorService {
             String dataStatus = !xqEnabled ? "DISABLED" : effectiveDate == null ? "NO_DATA"
                     : !today.equals(effectiveDate) ? "HISTORICAL"
                     : "FRESH".equals(quote.status()) || closeConfirmed ? "CURRENT" : "DELAYED";
+            // 资金只使用同一卡片有效交易日的真实点；模块失败和历史保留点不能冒充当前正常资金。
+            String fundStatus = !xqEnabled ? "DISABLED" : fundSeries.isEmpty() ? "NO_DATA"
+                    : today.equals(effectiveDate) && effectiveDate.equals(fundDate)
+                    && "FRESH".equals(fundModule.path("status").asText()) ? "AVAILABLE" : "STALE";
             stocks.add(new StockMonitorDtos.Stock(item.symbol(), item.code(), item.name(), item.market(),
                     i + 1, profileView(profiles.get(item.symbol())), quote, series,
-                    effectiveDate, dataStatus, closeConfirmed, fundSeries));
+                    effectiveDate, dataStatus, closeConfirmed, fundSeries, fundStatus,
+                    fundFlowMessage(fundStatus, fundModule, effectiveDate)));
         }
         return new StockMonitorDtos.Dashboard(1, stateId, xqEnabled, tradeDate, stocks);
     }
@@ -396,17 +403,36 @@ public class StockMonitorServiceImpl implements StockMonitorService {
         return value;
     }
 
-    private String readMarketFundDate() {
+    private JsonNode readMarketFundModule() {
         String raw = redisTemplate.opsForValue().get(MarketConstants.SNAPSHOT_KEY);
         if (raw == null) {
-            return null;
+            return objectMapper.missingNode();
         }
         try {
             JsonNode module = objectMapper.readTree(raw).path("modules").path("marketFundFlow");
-            return module.path("data").isObject() ? validTradeDate(module.path("tradeDate").asText(null)) : null;
+            return module.isObject() ? module : objectMapper.missingNode();
         } catch (JsonProcessingException exception) {
-            return null;
+            return objectMapper.missingNode();
         }
+    }
+
+    private String fundFlowMessage(String status, JsonNode module, String effectiveDate) {
+        if ("AVAILABLE".equals(status)) return null;
+        if ("DISABLED".equals(status)) return "采集总闸已关闭，资金数据不展示";
+        String result = "NO_DATA".equals(status)
+                ? "该卡片有效交易日" + (effectiveDate == null ? "尚未确定，暂无资金采样" : "（" + effectiveDate + "）暂无有效资金采样")
+                : "保留该交易日资金采样，当前资金数据已过期";
+        if (!"FRESH".equals(module.path("status").asText())) {
+            String reason = module.path("message").asText("");
+            String diagnostic = reason.contains("RESOURCE") || reason.contains("内存") || reason.contains("资源不足")
+                    ? "资金源资源不足" : reason.contains("DUPLICATE_CONFLICT") ? "资金源同批重复数据冲突"
+                    : module.isMissingNode() ? "资金模块结果不可用" : "资金源失败或处于冷却";
+            String attempted = module.path("lastAttemptAt").asText(null);
+            // 只输出固定诊断和校验过的模块时间，不透传源异常正文。
+            if (validOffsetTime(attempted)) diagnostic += "（最近尝试：" + attempted + "）";
+            return diagnostic + "；" + result;
+        }
+        return result;
     }
 
     private boolean closeConfirmed(StockMonitorDtos.Quote quote) {

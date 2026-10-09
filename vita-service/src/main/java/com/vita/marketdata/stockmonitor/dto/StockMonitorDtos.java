@@ -30,7 +30,7 @@ public final class StockMonitorDtos {
     public record Stock(String symbol, String code, String name, String market, int sortOrder,
                         Profile profile, Quote quote, List<SeriesPoint> series,
                         String effectiveTradeDate, String dataStatus, boolean closeConfirmed,
-                        List<FundPoint> fundSeries) {
+                        List<FundPoint> fundSeries, String fundFlowStatus, String fundFlowMessage) {
     }
 
     public record Dashboard(int schemaVersion, String stateId, boolean xqEnabled,

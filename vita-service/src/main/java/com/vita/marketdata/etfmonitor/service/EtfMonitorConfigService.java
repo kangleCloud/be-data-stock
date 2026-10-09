@@ -18,7 +18,6 @@ import com.vita.marketdata.etfmonitor.mapper.EtfAssetAllocationReportMapper;
 import com.vita.marketdata.etfmonitor.mapper.EtfMonitorConfigMapper;
 import com.vita.marketdata.etfmonitor.mapper.EtfMonitorProfileMapper;
 import com.vita.marketdata.etfmonitor.mapper.EtfSymbolDictionaryMapper;
-import com.vita.marketdata.property.StockMonitorProperty;
 import com.vita.marketdata.support.MarketDataRedisLock;
 import com.vita.mybatis.wrapper.LambdaQueryWrapperX;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -50,15 +49,13 @@ public class EtfMonitorConfigService {
     private final ObjectMapper json;
     private final MarketDataRedisLock redisLock;
     private final TransactionTemplate transactions;
-    private final boolean xqEnabled;
 
     public EtfMonitorConfigService(EtfSymbolDictionaryMapper dictionaryMapper,
                                    EtfMonitorConfigMapper configMapper,
                                    EtfMonitorProfileMapper profileMapper,
                                    EtfAssetAllocationReportMapper allocationMapper,
                                    StringRedisTemplate redis, ObjectMapper json,
-                                   MarketDataRedisLock redisLock, TransactionTemplate transactions,
-                                   StockMonitorProperty property) {
+                                   MarketDataRedisLock redisLock, TransactionTemplate transactions) {
         this.dictionaryMapper = dictionaryMapper;
         this.configMapper = configMapper;
         this.profileMapper = profileMapper;
@@ -67,7 +64,6 @@ public class EtfMonitorConfigService {
         this.json = json;
         this.redisLock = redisLock;
         this.transactions = transactions;
-        this.xqEnabled = property.isXqEnabled();
     }
 
     public PageResponse<EtfSymbolDictionary> pageDictionary(EtfDictionaryPageQuery request) {
@@ -131,12 +127,13 @@ public class EtfMonitorConfigService {
             throw new ServiceException(GlobalErrorCode.NOT_FOUND.getCode(), "ETF 字典中没有该代码");
         }
         EtfMonitorProfile profile = profileMapper.selectOne(EtfMonitorProfile::getSymbol, symbol);
-        EtfAssetAllocationReport report = xqEnabled ? allocationMapper.selectOne(
+        // 管理员可以查看已有报告；总闸仅限制公开展示和新的雪球采集，不删除历史资料。
+        EtfAssetAllocationReport report = allocationMapper.selectOne(
                 new LambdaQueryWrapperX<EtfAssetAllocationReport>()
                         .eq(EtfAssetAllocationReport::getSymbol, symbol)
-                        .orderByDesc(EtfAssetAllocationReport::getRequestedReportPeriod).last("LIMIT 1")) : null;
+                        .orderByDesc(EtfAssetAllocationReport::getRequestedReportPeriod).last("LIMIT 1"));
         Object allocation = null;
-        if (xqEnabled && report != null) {
+        if (report != null) {
             try {
                 com.fasterxml.jackson.databind.JsonNode categories = json.readTree(report.getCategoriesJson());
                 if (!categories.isArray()) {

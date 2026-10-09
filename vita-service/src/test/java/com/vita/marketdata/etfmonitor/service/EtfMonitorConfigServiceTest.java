@@ -12,7 +12,6 @@ import com.vita.marketdata.etfmonitor.mapper.EtfAssetAllocationReportMapper;
 import com.vita.marketdata.etfmonitor.mapper.EtfMonitorConfigMapper;
 import com.vita.marketdata.etfmonitor.mapper.EtfMonitorProfileMapper;
 import com.vita.marketdata.etfmonitor.mapper.EtfSymbolDictionaryMapper;
-import com.vita.marketdata.property.StockMonitorProperty;
 import com.vita.marketdata.support.MarketDataRedisLock;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -46,7 +45,7 @@ class EtfMonitorConfigServiceTest {
         EtfSymbolDictionary item = dictionary();
         when(dictionary.selectList(any(com.baomidou.mybatisplus.core.toolkit.support.SFunction.class), anyList()))
                 .thenReturn(List.of(item));
-        var page = service(dictionary, profiles, mock(EtfAssetAllocationReportMapper.class), false)
+        var page = service(dictionary, profiles, mock(EtfAssetAllocationReportMapper.class))
                 .pageProfile(query);
         assertEquals(1L, page.getTotal());
         assertEquals("510050", page.getList().get(0).code());
@@ -73,7 +72,7 @@ class EtfMonitorConfigServiceTest {
         report.setCollectedAt(LocalDateTime.of(2026, 9, 30, 10, 0));
         report.setCategoriesJson("[{\"category\":\"股票\",\"percent\":91.2}]");
         when(allocations.selectOne(any(Wrapper.class))).thenReturn(report);
-        Object allocation = service(dictionary, profiles, allocations, true)
+        Object allocation = service(dictionary, profiles, allocations)
                 .detail("SH510050").assetAllocation();
         JsonNode node = new ObjectMapper().valueToTree(allocation);
         assertEquals(1, node.path("categories").size());
@@ -93,17 +92,14 @@ class EtfMonitorConfigServiceTest {
 
     private EtfMonitorConfigService service(EtfSymbolDictionaryMapper dictionary,
                                             EtfMonitorProfileMapper profiles,
-                                            EtfAssetAllocationReportMapper allocations,
-                                            boolean xqEnabled) {
-        StockMonitorProperty property = new StockMonitorProperty();
-        property.setXqEnabled(xqEnabled);
+                                            EtfAssetAllocationReportMapper allocations) {
         return new EtfMonitorConfigService(dictionary, mock(EtfMonitorConfigMapper.class), profiles,
                 allocations, mock(StringRedisTemplate.class), new ObjectMapper(),
-                mock(MarketDataRedisLock.class), mock(TransactionTemplate.class), property);
+                mock(MarketDataRedisLock.class), mock(TransactionTemplate.class));
     }
 
     @Test
-    void detailProfileUsesPublicFieldsAndAcquisitionTimeWithXqDisabled() {
+    void detailProfileUsesPublicFieldsAndAcquisitionTimeWithoutAllocation() {
         var dictionary = mock(EtfSymbolDictionaryMapper.class);
         var profiles = mock(EtfMonitorProfileMapper.class);
         var allocations = mock(EtfAssetAllocationReportMapper.class);
@@ -115,11 +111,11 @@ class EtfMonitorConfigServiceTest {
         row.setProfileUpdatedAt(LocalDateTime.of(2026, 10, 3, 10, 1));
         when(profiles.selectOne(any(com.baomidou.mybatisplus.core.toolkit.support.SFunction.class), eq("SH510050")))
                 .thenReturn(row);
-        var result = service(dictionary, profiles, allocations, false).detail("SH510050").profile();
+        var result = service(dictionary, profiles, allocations).detail("SH510050").profile();
         assertEquals("THS", result.source());
         assertEquals("经理甲", result.fundManager());
         assertEquals("管理公司甲", result.manager());
         assertTrue(result.updatedAt().endsWith("+08:00"));
-        org.mockito.Mockito.verifyNoInteractions(allocations);
+        org.mockito.Mockito.verify(allocations).selectOne(any(Wrapper.class));
     }
 }

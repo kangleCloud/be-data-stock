@@ -2,6 +2,8 @@
 
 本契约适用于市场总览、个股监控和 ETF 监控。行情采集统一经 AKShare，真实来源不得为东方财富。金额单位元，价格单位元或指数点位，涨跌幅数值单位百分数。缺失值返回 JSON `null`，不得用 0 或估算值填充。所有时间戳为带 `+08:00` 偏移的 ISO 8601；无可靠源时间时 `sourceTime:null`，日内曲线横轴为实际 `collectedAt`。
 
+采集版本固定 AKShare `1.18.97`。Python 采集容器预算 512MiB，全局源进程最多 1 个，业务任务串行，不恢复八路采集或自动扩大内存。120 秒只是最小采样间隔，不承诺实际更新周期；慢轮及冷却可能使更新超过 120 秒。Java 保留同步等待终态、内部 Token 和固定本机入口，不新增 jobId 或补采来源。新浪 ETF 交易行情不得改用 `fund_etf_spot_ths`（基金净值）。
+
 ## 加载与事件
 
 首次进入、SSE 断流或版本缺口、页面恢复可见及普通手动刷新时 GET 完整缓存；正常更新由 SSE 推送，不固定每 10 秒 GET。普通刷新不触发 AKShare。服务器本机 scheduler 通过 [八个固定入口](python-jobs-local-api.md) 同步等待刷新结果，不生成 Java `jobId`。入口只允许真实回环直连、拒绝转发头，无需入站令牌；Java→Python 继续携带 `X-Internal-Token`。
@@ -22,7 +24,7 @@
 
 ## 市场 `coreIndices`
 
-市场 `modules` 在现有 `industrySectors`、`conceptSectors`、`marketFundFlow` 外新增 `coreIndices`。外壳沿用 `{status,tradeDate,tradeDateBasis,lastSuccessAt,lastAttemptAt,message,data}`，模块错误时 `data:null`，其他模块仍可用。指数源为 AKShare `stock_zh_index_spot_sina` 的新浪数据，固定代码及顺序为 `sh000001` 上证、`sz399001` 深证成指、`sh000300` 沪深300、`sz399006` 创业板、`sh000688` 科创50；管理员可禁用及排序，代码不从 ETF 名称推测。
+市场 `modules` 在现有 `industrySectors`、`conceptSectors`、`marketFundFlow` 外新增 `coreIndices`。外壳沿用 `{status,tradeDate,tradeDateBasis,lastSuccessAt,lastAttemptAt,message,data}`。失败或冷却时，有可复用的最近成功数据则保留原 `data`、交易日期及成功时间，状态降为 `STALE` 并更新尝试时间与诊断；没有可复用数据时为 `ERROR`、`data:null`，其他模块仍可用。指数源为 AKShare `stock_zh_index_spot_sina` 的新浪数据，固定代码及顺序为 `sh000001` 上证、`sz399001` 深证成指、`sh000300` 沪深300、`sz399006` 创业板、`sh000688` 科创50；管理员可禁用及排序，代码不从 ETF 名称推测。
 
 ```json
 {
@@ -43,9 +45,24 @@ Python 的 Redis 原始 `items` 固定包含五只已验证指数；Java 公开 
 
 市场通知为 `{schemaVersion:1,snapshotId,previousSnapshotId,changedModules}`，`changedModules` 可包含 `coreIndices`。SSE `ready:{snapshotId}`、`patch:{baseSnapshotId,snapshotId,generatedAt,modules:{仅变化模块的完整对象}}`、`resync:{}`。
 
+## 股票资金状态
+
+股票公开对象在既有 `fundSeries` 后增加 `fundFlowStatus` 与可空字符串 `fundFlowMessage`，不修改报价、价格曲线或 V1 版本字段。
+
+| fundFlowStatus | 含义 |
+| --- | --- |
+| `AVAILABLE` | 卡片有效交易日为当前日期，有该日有效资金点，且当前 `marketFundFlow` 为同日 FRESH |
+| `STALE` | 有该卡片日期的保留资金点，但模块失败／冷却／资源不足，模块日期不一致，或资金点属于历史日期 |
+| `NO_DATA` | 该卡片有效交易日没有有效资金点；不能用其他日期的点补满或将空值填零 |
+| `DISABLED` | 公开采集总闸关闭，资金点不展示 |
+
+Java 从 `stock:monitor:v1:enabled` 读取规范化启用清单，仅读取 `stock:monitor:v1:fund-series:{effectiveTradeDate}:{symbol}` 的真实点。有效日期优先报价／价格曲线，缺失时才取资金日期；同一卡片两条曲线保持同日。重复时间或不满足 `netAmount=inflow-outflow` 的曲线作为无有效采样处理，不能选取重复冲突的后一条。
+
+状态诊断读取对应市场模块的真实 `status/tradeDate/lastAttemptAt/message`，输出固定中文分类与合法的最近尝试时间，不透传源异常正文；AVAILABLE 时 message 为 null。同批 `DUPLICATE_CONFLICT` 由 Python 标记资金失败并保留旧点，Java 不另请求逐股源。资金模块失败或冷却等状态变化，即使没有新资金点，Python 也须沿既有监控事务推进股票 stateId 并通知启用股票，以使 SSE 的状态／诊断变化可达；不能伪造资金点。GET 与股票 patch 都包含新增状态字段，ready 仍只有 stateId、resync 仍为空对象。
+
 ## ETF 缓存与公开视图
 
-ETF 字典来自 AKShare `fund_etf_category_sina("ETF基金")` 的新浪行，含可靠 `sh`/`sz` 前缀，可规范化为 `SH510050` / `SZ159919`，保留六位 `code`。同源交易价不得用基金净值替代；逐条源时间不可靠，`quote.sourceTime:null`。交易所份额资料保留实际数据日期。跟踪指数代码只能来自可靠来源或经管理员核实，未知时为 `null`。雪球 `fund_individual_detail_hold_xq` 返回的是**资产配置类别占比**，不是成分股持仓；`requestedReportPeriod` 只表示请求报告期，不代表已核实披露日。
+ETF 字典来自 AKShare `fund_etf_category_sina("ETF基金")` 的新浪行，含可靠 `sh`/`sz` 前缀，可规范化为 `SH510050` / `SZ159919`，保留六位 `code`。同源交易价不得用基金净值替代；逐条源时间不可靠，`quote.sourceTime:null`。ETF 基本资料使用 `fund_info_ths`，不再采集交易所资料；THS 资料不建立上市状态、上市日期、份额或份额日期，成功同步后这些旧字段为空，不把成立日期当作上市日期。跟踪指数代码只能来自可靠来源或经管理员核实，未知时为 `null`。雪球 `fund_individual_detail_hold_xq` 返回的是**资产配置类别占比**，不是成分股持仓；`requestedReportPeriod` 只表示请求报告期，不代表已核实披露日。
 
 Python 在 Redis DB 2 写 `stock:etf-monitor:v1:snapshot`：
 
@@ -84,13 +101,15 @@ Python 在 Redis DB 2 写 `stock:etf-monitor:v1:snapshot`：
   "series":[{"collectedAt":"2026-09-30T10:00:00+08:00","price":2.5}],
   "fundSeries":[],"fundFlowStatus":"NO_RELIABLE_SOURCE",
   "effectiveTradeDate":"2026-09-30","dataStatus":"CURRENT","closeConfirmed":false,
-  "assetAllocation":null
+  "assetAllocation":null,"assetAllocationStatus":"NOT_SYNCED"
 }
 ```
 
 `effectiveTradeDate` 优先取最近有效行情/价格曲线日期，再取资金曲线日期；两条曲线只返回该同一日期的真实点，缺样各自为空，不补点。`dataStatus` 为 `CURRENT`、`DELAYED`、`HISTORICAL` 或 `NO_DATA`；无可靠源时间时 `closeConfirmed=false`，历史报价不能声称已确认收盘。ETF 资金净流入在无可靠非东财来源时固定 `fundSeries:[]`、`fundFlowStatus:"NO_RELIABLE_SOURCE"`，页面显示“暂无可靠数据”。雪球总闸 `xqEnabled=false` 时隐藏 `assetAllocation`，但不隐藏新浪交易行情与同花顺基本资料。
 
-`assetAllocation` 非空时仅含 `{requestedReportPeriod,source:"XQ_DANJUAN",collectedAt,categories:[{category,percent}]}`，没有成分股、持仓日期或虚构的披露日期。该报告快照存 MySQL，行情/曲线只存 Redis。ETF SSE `ready:{stateId}`、`patch:{baseStateId,stateId,etfs:[仅变化 symbol 的完整公开对象]}`、`resync:{}`；配置/资料变化和不能确保增量时使用 `resync`。
+`assetAllocation` 非空时仅含 `{requestedReportPeriod,source:"XQ_DANJUAN",collectedAt,categories:[{category,percent}]}`，没有成分股、持仓日期或虚构的披露日期。新增 `assetAllocationStatus`：总闸关闭优先 `DISABLED` 并隐藏报告；开启且有有效报告为 `AVAILABLE`；缺失或无效报告为 `NOT_SYNCED`。有效报告要求正确来源、报告期、采集时间和非空有效类别百分比。
+
+该报告快照存既有 MySQL 报告表，行情/曲线只存 Redis。ETF SSE `ready:{stateId}`、`patch:{baseStateId,stateId,etfs:[仅变化 symbol 的行情公开对象]}`、`resync:{}`；行情 patch 保留 `assetAllocationStatus`，不重复携带完整 `assetAllocation`。报告同步成功推进既有 resync，完整报告由重新 GET 读取。ready／resync 字段不变。ETF 资金仍为 `fundSeries:[]`、`fundFlowStatus:"NO_RELIABLE_SOURCE"`。
 
 ## 内部同步与管理端
 
@@ -108,12 +127,28 @@ Python 内部服务仅供带 `X-Internal-Token` 的 Java 调用：
 | --- | --- | --- |
 | `GET /system/etfDictionary/page` | `system:etf-dictionary:view` | `pageNum/pageSize/keyword/market/etfType`，返回 `PageResponse`，行含 symbol/code/name/market/exchange/etfType/listingStatus/listingDate/trackingIndexCode/trackingIndexName/source/syncedAt |
 | `GET /system/etfProfile/page` | `system:etf-profile:view` | `pageNum/pageSize/keyword/fundType/trackingIndexCode`；分页行含 symbol/code/name/market、资料字段和带偏移的 updatedAt |
-| `GET /system/etfProfile/detail?symbol=...` | `system:etf-profile:view` | `{dictionary,profile,assetAllocation}`；资产配置解析为 categories 数组和带偏移 collectedAt；雪球关时为 null |
+| `GET /system/etfProfile/detail?symbol=...` | `system:etf-profile:view` | `{dictionary,profile,assetAllocation}`；有权限管理员可看已有报告，不受总闸关闭遮蔽；公开端仍隐藏 |
 | `GET /system/etfMonitor/list` | `system:etf-monitor:view` | 已启用清单，最多 10 条 |
 | `POST /system/etfMonitor/enable` | `system:etf-monitor:update` | `{symbol,enabled}`；不影响个股 10 只额度 |
 | `POST /system/etfMonitor/sort` | `system:etf-monitor:update` | `{symbols:[...]}`；必须与当前已启用集合一致 |
 | `POST /system/etfMonitor/refresh` | `system:etf-monitor:refresh` | 同步等待字典与同花顺基本资料，返回 `{status,startedAt,finishedAt,message}`，无 jobId |
 | `POST /system/etfMonitor/allocation/refresh?symbol=...&reportPeriod=YYYYMMDD` | `system:etf-monitor:refresh` | 雪球总闸开启且 ETF 已启用时同步实际类别占比 |
+
+资产配置复用上述入口（实际管理端前缀 `/admin/api`），选择请求报告期，同步等待结果；成功按 symbol＋报告期插入或更新原报告表并发 resync，失败保留旧报告。不另建接口，不由 ETF 整体刷新自动触发。
+
+Python 失败只增加 `detail.reason` 分类 `RESOURCE/NO_DATA/DISABLED/SOURCE`，成功包不变。NO_DATA 仅表示确实无该报告期有效数据，格式变化／任意解析异常不能归为无报告。Java 不透传 detail.message 或源正文；旧字符串 detail 和未知分类使用固定通用诊断。
+
+| Python HTTP／本地校验 | Java 业务码 | 诊断 |
+| --- | --- | --- |
+| 409 全局忙 | 423 | 等待当前任务完成 |
+| 429 限频 | 429 | 限频或冷却 |
+| 422 参数／Java 无效日期或未启用 ETF | 400 | 代码或报告期不合法／只能同步已启用 ETF |
+| 503 RESOURCE | 503 | 资源不足，旧报告保留 |
+| 502 NO_DATA | 503 | 没有该请求报告期有效报告，旧报告保留 |
+| 503 DISABLED／Java 总闸关闭 | 503 | 总闸或授权关闭；Java 关闭时零 Python 调用 |
+| 502 SOURCE／其他失败 | 503 | 源不可用／通用同步失败，旧报告保留 |
+
+管理端 HTTP 状态与业务码沿普通 `CommonResult` 约定，不能将 Python 409 混同于请求成功；不输出 Token 或源正文。
 | `GET /system/indexConfig/list` | `system:index-config:view` | 五指数配置 code/name/enabled/sortOrder |
 | `POST /system/indexConfig/update` | `system:index-config:update` | `{code,enabled,sortOrder}`；代码仅限五个已核实默认值 |
 

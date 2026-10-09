@@ -3,11 +3,14 @@ package com.vita.marketdata.etfmonitor.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vita.core.exception.ServiceException;
+import com.vita.marketdata.etfmonitor.entity.EtfAssetAllocationReport;
 import com.vita.marketdata.etfmonitor.entity.EtfMonitorProfile;
 import com.vita.marketdata.etfmonitor.mapper.EtfAssetAllocationReportMapper;
 import com.vita.marketdata.etfmonitor.mapper.EtfMonitorProfileMapper;
 import com.vita.marketdata.property.StockMonitorProperty;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -19,6 +22,39 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class EtfMonitorDashboardServiceTest {
+    @ParameterizedTest
+    @ValueSource(strings = {"valid", "missing", "disabled", "empty", "badSource", "badPercent", "badJson"})
+    void publicAllocationStateReflectsGateAndValidatedReport(String scenario) {
+        var redis = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked") ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.get("stock:etf-monitor:v1:enabled"))
+                .thenReturn("[{\"symbol\":\"SH510050\",\"code\":\"510050\",\"name\":\"50ETF\",\"market\":\"SH\"}]");
+        var allocations = mock(EtfAssetAllocationReportMapper.class);
+        var report = new EtfAssetAllocationReport();
+        report.setSource("badSource".equals(scenario) ? "OTHER" : "XQ_DANJUAN");
+        report.setRequestedReportPeriod(LocalDate.of(2026, 6, 30));
+        report.setCollectedAt(LocalDateTime.of(2026, 10, 9, 10, 0));
+        report.setCategoriesJson(switch (scenario) {
+            case "empty" -> "[]";
+            case "badJson" -> "not-json";
+            case "badPercent" -> "[{\"category\":\"股票\",\"percent\":101}]";
+            default -> "[{\"category\":\"股票\",\"percent\":91.2}]";
+        });
+        when(allocations.selectOne(any(com.baomidou.mybatisplus.core.conditions.Wrapper.class)))
+                .thenReturn("missing".equals(scenario) ? null : report);
+        var property = new StockMonitorProperty();
+        property.setXqEnabled(!"disabled".equals(scenario));
+        var row = new EtfMonitorDashboardService(redis, new ObjectMapper(), mock(EtfMonitorProfileMapper.class),
+                allocations, property).dashboard().path("etfs").get(0);
+        assertEquals("disabled".equals(scenario) ? "DISABLED" : "valid".equals(scenario) ? "AVAILABLE" : "NOT_SYNCED",
+                row.path("assetAllocationStatus").asText());
+        assertEquals("valid".equals(scenario), !row.path("assetAllocation").isNull());
+        assertEquals("NO_RELIABLE_SOURCE", row.path("fundFlowStatus").asText());
+        assertTrue(row.path("fundSeries").isEmpty());
+        if ("disabled".equals(scenario)) verifyNoInteractions(allocations);
+    }
+
     @Test
     void stateChangesDuringReadRetryAgainstLatestVersion() {
         var redis = mock(StringRedisTemplate.class);

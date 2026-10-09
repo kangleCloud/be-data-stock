@@ -143,7 +143,9 @@ public class EtfMonitorDashboardService {
                 ? "HISTORICAL" : quote != null && "FRESH".equals(quote.path("status").textValue())
                 ? "CURRENT" : "DELAYED");
         etf.put("closeConfirmed", false);
-        etf.set("assetAllocation", xqEnabled ? allocation(symbol) : json.nullNode());
+        JsonNode report = xqEnabled ? allocation(symbol) : json.nullNode();
+        etf.set("assetAllocation", report);
+        etf.put("assetAllocationStatus", !xqEnabled ? "DISABLED" : report.isNull() ? "NOT_SYNCED" : "AVAILABLE");
         return etf;
     }
 
@@ -188,13 +190,22 @@ public class EtfMonitorDashboardService {
         EtfAssetAllocationReport report = allocations.selectOne(new LambdaQueryWrapperX<EtfAssetAllocationReport>()
                 .eq(EtfAssetAllocationReport::getSymbol, symbol)
                 .orderByDesc(EtfAssetAllocationReport::getRequestedReportPeriod).last("LIMIT 1"));
-        if (report == null) {
+        if (report == null || !"XQ_DANJUAN".equals(report.getSource())
+                || report.getRequestedReportPeriod() == null || report.getCollectedAt() == null
+                || report.getCategoriesJson() == null) {
             return json.nullNode();
         }
         try {
             JsonNode categories = json.readTree(report.getCategoriesJson());
-            if (!categories.isArray()) {
+            if (!categories.isArray() || categories.isEmpty()) {
                 return json.nullNode();
+            }
+            for (JsonNode category : categories) {
+                if (!category.path("category").isTextual() || category.path("category").asText().isBlank()
+                        || !category.path("percent").isNumber() || category.path("percent").decimalValue().signum() < 0
+                        || category.path("percent").decimalValue().compareTo(java.math.BigDecimal.valueOf(100)) > 0) {
+                    return json.nullNode();
+                }
             }
             ObjectNode value = json.createObjectNode();
             value.put("requestedReportPeriod", report.getRequestedReportPeriod().toString());
@@ -203,7 +214,7 @@ public class EtfMonitorDashboardService {
             value.set("categories", categories);
             return value;
         } catch (JsonProcessingException exception) {
-            throw unavailable("ETF 资产配置报告格式错误");
+            return json.nullNode();
         }
     }
 

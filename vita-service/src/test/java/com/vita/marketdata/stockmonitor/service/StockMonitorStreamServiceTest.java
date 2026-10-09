@@ -81,6 +81,8 @@ class StockMonitorStreamServiceTest {
         assertEquals(first.effectiveTradeDate(), payload.path("effectiveTradeDate").asText());
         assertTrue(payload.path("closeConfirmed").asBoolean());
         assertEquals(1, payload.path("fundSeries").size());
+        assertEquals("STALE", payload.path("fundFlowStatus").asText());
+        assertTrue(payload.has("fundFlowMessage"));
         var fund = payload.path("fundSeries").get(0);
         assertEquals(point.collectedAt(), fund.path("collectedAt").asText());
         assertEquals(0, point.inflow().compareTo(fund.path("inflow").decimalValue()));
@@ -196,6 +198,6 @@ class StockMonitorStreamServiceTest {
                 null, null, null, null, null, null, null, null, null, null, "STALE");
         return new StockMonitorDtos.Stock(symbol, symbol.substring(2), "测试股票", symbol.substring(0, 2),
                 1, null, quote, List.of(new StockMonitorDtos.SeriesPoint(quote.sourceTime(), quote.price())),
-                "2026-09-28", "HISTORICAL", true, funds);
+                "2026-09-28", "HISTORICAL", true, funds, funds.isEmpty() ? "NO_DATA" : "STALE", null);
     }
 }

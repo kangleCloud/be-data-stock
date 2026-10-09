@@ -12,6 +12,8 @@ import com.vita.marketdata.stockmonitor.service.impl.StockMonitorServiceImpl;
 import com.vita.marketdata.support.MarketDataRedisLock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -124,6 +126,60 @@ class StockDashboardVersionTest {
         verify(values, never()).get(quoteKey);
         verify(values, never()).get(fundKey);
         verifyNoInteractions(profiles);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"available", "failed", "cooldown", "resource", "historical", "noPoint",
+            "wrongDate", "disabled", "duplicateConflict", "invalidPoint"})
+    void fundsReflectRealModuleResultAndOnlyCardEffectiveDate(String scenario) throws Exception {
+        String today = LocalDate.now(ZoneId.of("Asia/Shanghai")).toString();
+        String cardDate = "historical".equals(scenario) ? date : today;
+        cache.put(StockMonitorConstants.LAST_TRADE_DATE_KEY, cardDate);
+        cache.put(quoteKey, quote(10).replace(date, cardDate));
+        cache.put(StockMonitorConstants.SERIES_PREFIX + cardDate + ":SH600000",
+                "[{\"time\":\"" + cardDate + "T15:01:00+08:00\",\"price\":10}]");
+        String currentFundKey = StockMonitorConstants.FUND_SERIES_PREFIX + cardDate + ":SH600000";
+        cache.put(currentFundKey, funds(100).replace(date, cardDate));
+        var module = json.createObjectNode().put("tradeDate", cardDate).put("status", "FRESH")
+                .put("lastAttemptAt", today + "T15:10:00+08:00");
+        module.putObject("data");
+        String expected = switch (scenario) {
+            case "disabled" -> "DISABLED";
+            case "historical", "failed", "cooldown", "resource", "duplicateConflict" -> "STALE";
+            case "noPoint", "wrongDate", "invalidPoint" -> "NO_DATA";
+            default -> "AVAILABLE";
+        };
+        switch (scenario) {
+            case "failed" -> { module.put("status", "ERROR"); module.putNull("data"); }
+            case "cooldown" -> module.put("status", "STALE").put("message", "冷却期间跳过");
+            case "resource" -> module.put("status", "STALE").put("message", "RESOURCE secret-test");
+            case "duplicateConflict" -> module.put("status", "STALE").put("message", "DUPLICATE_CONFLICT");
+            case "noPoint" -> cache.remove(currentFundKey);
+            case "wrongDate" -> { cache.remove(currentFundKey); module.put("tradeDate", date); }
+            case "invalidPoint" -> cache.put(currentFundKey, funds(100).replace(date, cardDate).replace("\"netAmount\":60", "\"netAmount\":0"));
+            default -> { }
+        }
+        var root = json.createObjectNode();
+        root.putObject("modules").set("marketFundFlow", module);
+        cache.put(MarketConstants.SNAPSHOT_KEY, root.toString());
+        var stock = service(!"disabled".equals(scenario)).dashboard().stocks().get(0);
+        assertEquals(expected, stock.fundFlowStatus());
+        if ("AVAILABLE".equals(expected)) assertNull(stock.fundFlowMessage());
+        else assertNotNull(stock.fundFlowMessage());
+        if ("NO_DATA".equals(expected) || "DISABLED".equals(expected)) assertTrue(stock.fundSeries().isEmpty());
+        else assertEquals(1, stock.fundSeries().size());
+        if (!"disabled".equals(scenario)) {
+            assertEquals(cardDate, stock.effectiveTradeDate());
+            assertEquals(cardDate, stock.quote().tradeDate());
+            assertTrue(stock.series().stream().allMatch(point -> point.time().startsWith(cardDate)));
+            assertTrue(stock.fundSeries().stream().allMatch(point -> point.collectedAt().startsWith(cardDate)));
+        }
+        if ("resource".equals(scenario)) {
+            assertTrue(stock.fundFlowMessage().contains("资源不足"));
+            assertFalse(stock.fundFlowMessage().contains("secret-test"));
+            assertTrue(stock.fundFlowMessage().contains(today + "T15:10:00+08:00"));
+        }
+        verify(values, never()).set(anyString(), anyString());
     }
 
     private StockMonitorServiceImpl service(boolean xqEnabled) {

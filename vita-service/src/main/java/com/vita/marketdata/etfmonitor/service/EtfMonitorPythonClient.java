@@ -1,6 +1,7 @@
 package com.vita.marketdata.etfmonitor.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vita.core.exception.GlobalErrorCode;
 import com.vita.core.exception.ServiceException;
 import com.vita.marketdata.property.StockMonitorProperty;
@@ -10,6 +11,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.Map;
 
@@ -67,13 +70,38 @@ public class EtfMonitorPythonClient {
             return client.post().uri(baseUrl.replaceAll("/+$", "") + path)
                     .header("X-Internal-Token", token).body(body).retrieve()
                     .onStatus(code -> code.value() == 409, (request, response) -> {
-                        throw new ServiceException(GlobalErrorCode.LOCKED.getCode(), "ETF 资料批次正在执行");
+                        throw new ServiceException(GlobalErrorCode.LOCKED.getCode(), "采集任务正在执行，请等待完成后重试");
                     })
                     .onStatus(code -> code.value() == 429, (request, response) -> {
-                        throw new ServiceException(GlobalErrorCode.TOO_MANY_REQUESTS.getCode(), "ETF 资料刷新未满足 30 分钟间隔");
+                        throw new ServiceException(GlobalErrorCode.TOO_MANY_REQUESTS.getCode(), "ETF 同步触发限频或冷却，请稍后重试");
+                    })
+                    .onStatus(code -> code.isError(), (request, response) -> {
+                        throw failure(response.getStatusCode().value(), response.getBody());
                     }).body(JsonNode.class);
         } catch (RestClientException exception) {
             throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "Python ETF 同步失败");
         }
+    }
+
+    private ServiceException failure(int status, InputStream body) {
+        if (status == 422 || status == 400) {
+            return new ServiceException(GlobalErrorCode.BAD_REQUEST.getCode(), "ETF 代码或请求报告期不合法");
+        }
+        String reason = "";
+        try {
+            // 失败正文只限量解析冻结的分类枚举，不透传 message、令牌或第三方响应。
+            JsonNode error = new ObjectMapper().readTree(body.readNBytes(4096));
+            if (error != null) reason = error.path("detail").path("reason").asText("");
+        } catch (IOException exception) {
+            // 旧字符串 detail 或非法正文使用固定通用诊断。
+        }
+        String message = switch (reason) {
+            case "RESOURCE" -> "采集服务资源不足，本次同步未完成，已有报告保留";
+            case "NO_DATA" -> "数据源没有该请求报告期的有效资产配置，已有报告保留";
+            case "DISABLED" -> "雪球采集总闸或授权已关闭，无法同步资产配置";
+            case "SOURCE" -> "资产配置数据源暂不可用，已有报告保留";
+            default -> "Python ETF 同步失败，已有资料保留";
+        };
+        return new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), message);
     }
 }

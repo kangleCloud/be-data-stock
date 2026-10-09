@@ -3,6 +3,8 @@ package com.vita.marketdata.etfmonitor.service;
 import com.vita.core.exception.ServiceException;
 import com.vita.marketdata.property.StockMonitorProperty;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -58,6 +60,27 @@ class EtfMonitorPythonClientTest {
                     exception.getCode());
             server.verify();
         }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"RESOURCE,503,资源不足", "NO_DATA,502,没有该请求报告期", "DISABLED,503,总闸或授权",
+            "SOURCE,502,数据源暂不可用", "UNKNOWN,502,同步失败", "LEGACY,502,同步失败", "SOURCE,422,报告期不合法"})
+    void allocationFailureUsesOnlyFrozenReasonAndNeverSourceBody(String reason, int status, String message) {
+        RestClient.Builder builder = RestClient.builder();
+        var server = MockRestServiceServer.bindTo(builder).build();
+        String body = "LEGACY".equals(reason) ? "{\"detail\":\"secret-test\"}"
+                : "{\"detail\":{\"reason\":\"" + reason + "\",\"message\":\"secret-test\"}}";
+        server.expect(requestTo("http://python.test/internal/etf-monitor/v1/asset-allocation"))
+                .andExpect(header("X-Internal-Token", "test-only"))
+                .andExpect(content().json("{\"symbol\":\"SH510050\",\"reportPeriod\":\"20260630\"}"))
+                .andRespond(withStatus(HttpStatus.valueOf(status)).contentType(MediaType.APPLICATION_JSON).body(body));
+        var client = new EtfMonitorPythonClient(property(), builder.build(), builder.build(), builder.build());
+        var error = assertThrows(ServiceException.class,
+                () -> client.assetAllocation(Map.of("symbol", "SH510050", "reportPeriod", "20260630")));
+        assertEquals(status == 422 ? 400 : 503, error.getCode());
+        org.junit.jupiter.api.Assertions.assertTrue(error.getMessage().contains(message));
+        org.junit.jupiter.api.Assertions.assertFalse(error.getMessage().contains("secret-test"));
+        server.verify();
     }
 
     private StockMonitorProperty property() {
