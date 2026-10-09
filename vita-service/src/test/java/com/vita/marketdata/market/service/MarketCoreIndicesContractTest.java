@@ -25,12 +25,15 @@ class MarketCoreIndicesContractTest {
         when(config.enabled()).thenReturn(List.of(
                 new MarketIndexConfigDto("sz399006", "创业板指", true, 1),
                 new MarketIndexConfigDto("sh000001", "上证指数", true, 2)));
-        var result = service(raw.toString(), config).getSnapshot();
+        var snapshots = service(raw.toString(), config);
+        var result = snapshots.getSnapshot();
         var visible = result.path("modules").path("coreIndices").path("data").path("items");
         assertEquals(2, visible.size());
         assertEquals("sz399006", visible.get(0).path("code").asText());
         assertEquals("sh000001", visible.get(1).path("code").asText());
         assertNotEquals(raw.path("snapshotId").asText(), result.path("snapshotId").asText());
+        assertEquals(snapshots.publicSnapshotId(raw.path("snapshotId").asText()),
+                result.path("snapshotId").asText(), "SSE 通知映射与匿名 GET 必须使用相同公开版本");
     }
 
     @Test

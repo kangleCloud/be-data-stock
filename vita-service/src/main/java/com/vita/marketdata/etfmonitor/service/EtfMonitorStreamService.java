@@ -89,7 +89,9 @@ public class EtfMonitorStreamService implements MessageListener {
                 boolean valid = validNotice(notice) && dashboard.path("stateId").textValue() != null
                         && dashboard.path("stateId").textValue().equals(notice.path("stateId").textValue());
                 for (EtfMonitorStreamClient client : clients) {
-                    if (valid && !client.resyncRequired && dashboard.path("stateId").textValue().equals(client.stateId)) {
+                    // 显式 resync 可能携带客户端已有版本，不能按普通重复通知丢弃。
+                    if (valid && !client.resyncRequired && !notice.path("resync").asBoolean(false)
+                            && dashboard.path("stateId").textValue().equals(client.stateId)) {
                         continue;
                     }
                     if (!valid || client.resyncRequired || client.stateId == null

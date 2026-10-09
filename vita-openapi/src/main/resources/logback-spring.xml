@@ -6,7 +6,7 @@
               value="【%level】%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %logger{50} - [%method,%line] - %X{requestId} - %msg%n"/>
 
     <!-- 文件日志模式：目录相对于启动工作目录，Maven 本地启动固定为仓库根目录。 -->
-    <property name="LOG_HOME" value="./home/logs/"/>
+    <property name="LOG_HOME" value="./home/logs"/>
 
     <!-- 控制台日志 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">

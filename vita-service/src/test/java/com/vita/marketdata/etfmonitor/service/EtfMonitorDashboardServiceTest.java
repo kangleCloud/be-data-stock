@@ -20,6 +20,38 @@ import static org.mockito.Mockito.*;
 
 class EtfMonitorDashboardServiceTest {
     @Test
+    void stateChangesDuringReadRetryAgainstLatestVersion() {
+        var redis = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked") ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.get("stock:etf-monitor:v1:enabled")).thenReturn("[]");
+        when(values.get("stock:etf-monitor:v1:state-id")).thenReturn(
+                "11111111111111111111111111111111", "22222222222222222222222222222222",
+                "33333333333333333333333333333333", "33333333333333333333333333333333");
+        var service = new EtfMonitorDashboardService(redis, new ObjectMapper(),
+                mock(EtfMonitorProfileMapper.class), mock(EtfAssetAllocationReportMapper.class),
+                new StockMonitorProperty());
+        assertEquals("33333333333333333333333333333333", service.dashboard().path("stateId").asText());
+        verify(values, times(2)).get("stock:etf-monitor:v1:enabled");
+    }
+
+    @Test
+    void repeatedStateChangesRejectMixedDashboardAfterBoundedRetry() {
+        var redis = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked") ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.get("stock:etf-monitor:v1:enabled")).thenReturn("[]");
+        when(values.get("stock:etf-monitor:v1:state-id")).thenReturn(
+                "11111111111111111111111111111111", "22222222222222222222222222222222",
+                "33333333333333333333333333333333", "44444444444444444444444444444444");
+        var service = new EtfMonitorDashboardService(redis, new ObjectMapper(),
+                mock(EtfMonitorProfileMapper.class), mock(EtfAssetAllocationReportMapper.class),
+                new StockMonitorProperty());
+        assertEquals(503, assertThrows(ServiceException.class, service::dashboard).getCode());
+        verify(values, times(2)).get("stock:etf-monitor:v1:enabled");
+    }
+
+    @Test
     void rejectsSnapshotWithUnapprovedSource() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         @SuppressWarnings("unchecked")
