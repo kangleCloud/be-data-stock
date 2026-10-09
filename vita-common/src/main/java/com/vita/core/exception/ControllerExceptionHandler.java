@@ -112,10 +112,15 @@ public class ControllerExceptionHandler {
      */
     @ExceptionHandler(value = Exception.class)
     @ResponseBody
-    public CommonResult validExceptionHandler(Exception e) {
+    public ResponseEntity<?> validExceptionHandler(Exception e, HttpServletRequest request,
+                                                   HttpServletResponse response) throws IOException {
         LOG.error("系统异常：" , e);
         String resolvedMessage = resolveErrorCodeMessage(GlobalErrorCode.INTERNAL_SERVER_ERROR);
-        return CommonResult.error(GlobalErrorCode.INTERNAL_SERVER_ERROR.getCode(), resolvedMessage);
+        // SSE 握手异常必须显式写入 JSON；否则客户端仅接受事件流时，错误体会再次触发响应协商异常。
+        if (CommonStreamResult.isStreamRequest(request)) {
+            return CommonStreamResult.error(response, HttpStatus.INTERNAL_SERVER_ERROR.value(), resolvedMessage);
+        }
+        return ResponseEntity.ok(CommonResult.error(GlobalErrorCode.INTERNAL_SERVER_ERROR.getCode(), resolvedMessage));
     }
 
     private String resolveValidationMessage(String message) {

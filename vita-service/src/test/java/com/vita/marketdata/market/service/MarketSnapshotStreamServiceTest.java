@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
@@ -29,6 +30,8 @@ class MarketSnapshotStreamServiceTest {
     private final AtomicReference<ObjectNode> current = new AtomicReference<>();
     private MarketSnapshotStreamService stream;
     private List<JsonNode> events;
+    private ScheduledExecutorService scheduler;
+    private SseEmitter emitter;
 
     @BeforeEach
     void prepareStream() throws Exception {
@@ -42,8 +45,9 @@ class MarketSnapshotStreamServiceTest {
             return raw == null ? null : id(Integer.parseInt(raw, 16) + 100);
         });
         current.set(snapshot(1, true));
-        stream = spy(new MarketSnapshotStreamService(snapshots, json, mock(ScheduledExecutorService.class)));
-        var emitter = mock(SseEmitter.class);
+        scheduler = mock(ScheduledExecutorService.class);
+        stream = spy(new MarketSnapshotStreamService(snapshots, json, scheduler));
+        emitter = mock(SseEmitter.class);
         events = attach(emitter, json);
         doReturn(emitter).when(stream).createEmitter();
     }
@@ -148,6 +152,18 @@ class MarketSnapshotStreamServiceTest {
         notice.put("resync", true);
         stream.onMessage(message(notice), null);
         assertResync(1);
+    }
+
+    @Test
+    void scheduledSixtySecondExpiryCompletesConnectionWithoutErrorEvent() {
+        stream.open();
+        var expiry = ArgumentCaptor.forClass(Runnable.class);
+        verify(scheduler).schedule(expiry.capture(), eq(60_000L), eq(TimeUnit.MILLISECONDS));
+        expiry.getValue().run();
+        expiry.getValue().run();
+        verify(emitter, times(1)).complete();
+        assertEquals(0, stream.activeClientCount());
+        assertEquals(1, events.size(), "到期只结束连接，不发送错误事件");
     }
 
     @Test

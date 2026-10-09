@@ -8,6 +8,8 @@
 
 三个 SSE 都以 `ready` 发送当前版本；版本连续时发送 `patch`，旧缓存无版本、乱序/漏事件或无法构造补丁时发送 `resync`，客户端重新 GET 后建流。版本缺失是 JSON `null`，不能序列化为字符串 `"null"`。断线重连应先 GET，再建立 SSE；`ready` 版本与 GET 不同则再 GET。
 
+成功握手固定返回 `200 text/event-stream;charset=UTF-8`，不包装 `CommonResult`；握手业务异常返回真实 HTTP 错误状态和 JSON，未捕获异常返回 HTTP 500 JSON。连接约 60 秒主动完成属于正常 EOF，心跳每 15 秒发送；正常 EOF 不属于 HTTP 握手响应格式错误。部署排查步骤及只读检查证据见 [SSE 握手诊断](sse-handshake-diagnostics.md)。
+
 通知只用于唤醒，补丁内容读取 Redis 当前快照。当前版本已领先通知或通知基版本与连接版本不一致时，发送 `resync`，不拼接跨版本补丁。同版本的普通重复通知可忽略，显式 `resync:true` 必须发送 `resync`；进入 resync 状态的连接不再发送 patch，客户端重新 GET 后重新建流。个股和 ETF 全量聚合读取校验读取前后的状态版本；首次变化重试一次，持续变化返回 503，避免返回混合版本的数据。
 
 | 看板 | 完整 GET | SSE | Redis 版本与通知 |

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.math.BigDecimal;
@@ -28,14 +29,17 @@ class StockMonitorStreamServiceTest {
     private final AtomicReference<StockMonitorDtos.Dashboard> current = new AtomicReference<>();
     private StockMonitorStreamService stream;
     private List<JsonNode> events;
+    private ScheduledExecutorService scheduler;
+    private SseEmitter emitter;
 
     @BeforeEach
     void openStream() throws Exception {
         var monitor = mock(StockMonitorService.class);
         when(monitor.dashboard()).thenAnswer(call -> current.get());
         current.set(dashboard(1, stock("SH600000", 10, List.of()), stock("SZ000001", 20, List.of())));
-        stream = spy(new StockMonitorStreamService(monitor, json, mock(ScheduledExecutorService.class)));
-        var emitter = mock(SseEmitter.class);
+        scheduler = mock(ScheduledExecutorService.class);
+        stream = spy(new StockMonitorStreamService(monitor, json, scheduler));
+        emitter = mock(SseEmitter.class);
         events = attach(emitter, json);
         doReturn(emitter).when(stream).createEmitter();
         stream.open();
@@ -91,6 +95,17 @@ class StockMonitorStreamServiceTest {
         stream.onMessage(message(notice), null);
         assertEquals(2, events.size());
         assertResync(1);
+    }
+
+    @Test
+    void scheduledSixtySecondExpiryCompletesConnectionWithoutErrorEvent() {
+        var expiry = ArgumentCaptor.forClass(Runnable.class);
+        verify(scheduler).schedule(expiry.capture(), eq(60_000L), eq(TimeUnit.MILLISECONDS));
+        expiry.getValue().run();
+        expiry.getValue().run();
+        verify(emitter, times(1)).complete();
+        stream.onMessage(message(notice(1, 2, "SH600000")), null);
+        assertEquals(1, events.size(), "到期连接不再接收增量或错误事件");
     }
 
     @Test

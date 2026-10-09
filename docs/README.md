@@ -25,6 +25,7 @@
 - RBAC 开发指南：`docs/development/system/rbac/`
 - MinIO AK/SK 指南：`docs/development/starter/file/vita-file-minio-aksk-guide.md`
 - CodeGraph 接入：`docs/development/codegraph-integration.md`
+- SSE 握手诊断：`docs/development/sse-handshake-diagnostics.md`
 
 ## 维护规则
 
