@@ -48,9 +48,13 @@ class SseHandshakeHttpTest {
     private StpLogic login;
     @Autowired
     private RequestTraceInterceptor trace;
+    @Autowired
+    private jakarta.servlet.ServletContext servletContext;
 
     @BeforeEach
     void prepareAnonymousRequest() throws Exception {
+        assertEquals(1, servletContext.getFilterRegistrations().values().stream()
+                .filter(filter -> filter.getClassName().equals("com.vita.web.xss.XssFilter")).count());
         reset(market, stocks, etfs, login, trace);
         when(trace.preHandle(any(), any(), any())).thenReturn(true);
         doThrow(new IllegalStateException("测试未登录")).when(login).checkLogin();

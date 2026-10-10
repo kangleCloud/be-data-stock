@@ -19,6 +19,7 @@ import com.vita.marketdata.market.service.MarketSnapshotService;
 import com.vita.marketdata.market.service.MarketSnapshotStreamService;
 import com.vita.marketdata.stockmonitor.service.StockMonitorService;
 import com.vita.marketdata.stockmonitor.service.StockMonitorStreamService;
+import com.vita.web.xss.XssConfig;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.http.HttpMessageConvertersAutoConfiguration;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
@@ -40,7 +41,7 @@ import static org.mockito.Mockito.mock;
 @Import({MarketDashboardController.class, StockMonitorDashboardController.class, EtfMonitorDashboardController.class,
         ControllerExceptionHandler.class, SaTokenExceptionHandler.class, SaTokenConfigure.class, AuthProperty.class,
         MarketDashboardPublicAuthConfiguration.class, StockMonitorPublicAuthConfiguration.class,
-        EtfMonitorPublicAuthConfiguration.class, SsePrivateTestController.class})
+        EtfMonitorPublicAuthConfiguration.class, SsePrivateTestController.class, XssConfig.class})
 public class SseHttpTestConfiguration {
     @Bean
     MarketSnapshotService marketSnapshots() {

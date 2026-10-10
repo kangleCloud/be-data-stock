@@ -1,0 +1,8 @@
+# 将此 vita.xss 片段合并至四个启动模块的 application-dev.yml / application-prod.yml。
+# 样例不包含凭据；配置直接填写，不使用环境变量占位符。
+vita:
+  xss:
+    enabled: true
+    url-patterns: ["/*"]
+    exclude-paths: []
+    max-json-body-size: 10MB

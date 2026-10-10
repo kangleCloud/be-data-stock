@@ -104,6 +104,7 @@ vita-scheduler -> vita-service -> vita-common
 
 ## 配置与协作入口
 
+- 请求层 XSS 配置、凭据豁免和验证边界见 [XSS 防护说明](docs/development/system/security/xss-protection.md)。
 - 当前 `application.yml` 通过 `${vita.*}` 占位符读取外部化配置，请在 profile 文件或运行环境中提供对应值。
 - AI 任务的规划、Skill 路由和交付流程见 `AGENTS.md`。
 - 模块边界、代码、事务、DDL、生成器及文档联动的强制约束见 `AICoding/rules/be-vita-ai-codegen-rules.md`。
