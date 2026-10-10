@@ -3,6 +3,7 @@ package com.vita.controller.marketdata;
 import com.vita.controller.local.LoopbackRequestGuard;
 import com.vita.core.CommonResult;
 import com.vita.marketdata.dto.PythonRunResult;
+import com.vita.marketdata.enums.CollectionMode;
 import com.vita.marketdata.enums.PythonJobKind;
 import com.vita.marketdata.etfmonitor.dto.EtfRefreshResult;
 import com.vita.marketdata.etfmonitor.service.EtfMonitorRefreshService;
@@ -40,7 +41,8 @@ public class MarketDataRefreshController {
     @PostMapping("/stock/dictionary/refresh")
     public CommonResult<StockMonitorDtos.RefreshStatus> refreshStockDictionary(HttpServletRequest request) {
         LoopbackRequestGuard.requireLoopback(request);
-        return CommonResult.success(stocks.refreshDictionary());
+        // 模式由真实回环入口固定选择，不读取或透传调用者的模式头。
+        return CommonResult.success(stocks.refreshDictionary(CollectionMode.MANUAL));
     }
 
     /**
@@ -52,7 +54,7 @@ public class MarketDataRefreshController {
     @PostMapping("/stock/profiles/refresh")
     public CommonResult<StockMonitorDtos.RefreshStatus> refreshStockProfiles(HttpServletRequest request) {
         LoopbackRequestGuard.requireLoopback(request);
-        return CommonResult.success(stocks.refreshProfiles());
+        return CommonResult.success(stocks.refreshProfiles(CollectionMode.MANUAL));
     }
 
     /**
@@ -64,7 +66,7 @@ public class MarketDataRefreshController {
     @PostMapping("/calendar/refresh")
     public CommonResult<PythonRunResult> refreshCalendar(HttpServletRequest request) {
         LoopbackRequestGuard.requireLoopback(request);
-        return CommonResult.success(jobs.refresh(PythonJobKind.CALENDAR));
+        return CommonResult.success(jobs.refresh(PythonJobKind.CALENDAR, CollectionMode.MANUAL));
     }
 
     /**
@@ -76,7 +78,7 @@ public class MarketDataRefreshController {
     @PostMapping("/market/refresh")
     public CommonResult<PythonRunResult> refreshMarket(HttpServletRequest request) {
         LoopbackRequestGuard.requireLoopback(request);
-        return CommonResult.success(jobs.refresh(PythonJobKind.MARKET));
+        return CommonResult.success(jobs.refresh(PythonJobKind.MARKET, CollectionMode.MANUAL));
     }
 
     /**
@@ -88,13 +90,19 @@ public class MarketDataRefreshController {
     @PostMapping("/stock/quotes/refresh")
     public CommonResult<PythonRunResult> refreshStockQuotes(HttpServletRequest request) {
         LoopbackRequestGuard.requireLoopback(request);
-        return CommonResult.success(jobs.refresh(PythonJobKind.MONITOR));
+        return CommonResult.success(jobs.refresh(PythonJobKind.MONITOR, CollectionMode.MANUAL));
     }
 
+    /**
+     * 刷新 ETF 字典，通常用于在 scheduler 机器上定时执行。
+     *
+     * @param request
+     * @return
+     */
     @PostMapping("/etf/dictionary/refresh")
     public CommonResult<EtfRefreshResult> refreshEtfDictionary(HttpServletRequest request) {
         LoopbackRequestGuard.requireLoopback(request);
-        return CommonResult.success(etfs.refreshDictionary());
+        return CommonResult.success(etfs.refreshDictionary(CollectionMode.MANUAL));
     }
 
     /**
@@ -106,7 +114,7 @@ public class MarketDataRefreshController {
     @PostMapping("/etf/profiles/refresh")
     public CommonResult<EtfRefreshResult> refreshEtfProfiles(HttpServletRequest request) {
         LoopbackRequestGuard.requireLoopback(request);
-        return CommonResult.success(etfs.refreshProfiles());
+        return CommonResult.success(etfs.refreshProfiles(CollectionMode.MANUAL));
     }
 
     /**
@@ -116,6 +124,6 @@ public class MarketDataRefreshController {
     @PostMapping("/etf/quotes/refresh")
     public CommonResult<PythonRunResult> refreshEtfQuotes(HttpServletRequest request) {
         LoopbackRequestGuard.requireLoopback(request);
-        return CommonResult.success(jobs.refresh(PythonJobKind.ETF));
+        return CommonResult.success(jobs.refresh(PythonJobKind.ETF, CollectionMode.MANUAL));
     }
 }

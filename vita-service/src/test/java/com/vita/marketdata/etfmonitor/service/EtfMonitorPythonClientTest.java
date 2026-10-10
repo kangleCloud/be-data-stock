@@ -1,10 +1,12 @@
 package com.vita.marketdata.etfmonitor.service;
 
 import com.vita.core.exception.ServiceException;
+import com.vita.marketdata.enums.CollectionMode;
 import com.vita.marketdata.property.StockMonitorProperty;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -21,6 +23,23 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class EtfMonitorPythonClientTest {
+    @ParameterizedTest
+    @EnumSource(CollectionMode.class)
+    void dictionaryAndProfilesSendTokenAndExplicitRequestMode(CollectionMode mode) {
+        var builder = RestClient.builder();
+        var server = MockRestServiceServer.bindTo(builder).build();
+        for(String path:List.of("dictionary","profiles")) {
+            server.expect(requestTo("http://python.test/internal/etf-monitor/v1/"+path))
+                    .andExpect(header("X-Internal-Token","test-only"))
+                    .andExpect(header("X-Collection-Mode",mode.getHeaderValue()))
+                    .andRespond(withSuccess("{}",MediaType.APPLICATION_JSON));
+        }
+        var rest=builder.build();
+        var client=new EtfMonitorPythonClient(property(),rest,rest,rest);
+        client.dictionary(mode); client.profiles(Map.of("symbols",List.of("SH510050")),mode);
+        server.verify();
+    }
+
     @Test
     void operationsHaveSeparateBudgetsAndProfilesOnlySendsSymbolsWithToken() {
         RestClient.Builder dictionary = RestClient.builder();
@@ -30,13 +49,16 @@ class EtfMonitorPythonClientTest {
         var profilesServer = MockRestServiceServer.bindTo(profiles).build();
         var allocationServer = MockRestServiceServer.bindTo(allocation).build();
         dictionaryServer.expect(requestTo("http://python.test/internal/etf-monitor/v1/dictionary"))
+                .andExpect(header("X-Collection-Mode", "auto"))
                 .andExpect(header("X-Internal-Token", "test-only"))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
         profilesServer.expect(requestTo("http://python.test/internal/etf-monitor/v1/profiles"))
+                .andExpect(header("X-Collection-Mode", "auto"))
                 .andExpect(header("X-Internal-Token", "test-only"))
                 .andExpect(content().json("{\"symbols\":[\"SH510050\"]}", true))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
         allocationServer.expect(requestTo("http://python.test/internal/etf-monitor/v1/asset-allocation"))
+                .andExpect(header("X-Collection-Mode", "auto"))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
         var client = new EtfMonitorPythonClient(property(), dictionary.build(), profiles.build(), allocation.build());
         client.dictionary();

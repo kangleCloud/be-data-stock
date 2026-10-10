@@ -62,12 +62,16 @@ public class EtfMonitorDashboardService {
         JsonNode snapshot = parseOptional(redis.opsForValue().get(EtfMonitorConstants.SNAPSHOT_KEY));
         if (snapshot != null && (snapshot.path("schemaVersion").asInt(-1) != 1
                 || !"AKShare.fund_etf_category_sina".equals(snapshot.path("source").textValue())
-                || !snapshot.path("items").isArray() || !validDate(snapshot.path("tradeDate").textValue()))) {
+                || !snapshot.path("items").isArray() || !isNullableDate(snapshot.get("tradeDate")))) {
             throw unavailable("ETF 快照格式错误");
         }
         Map<String, JsonNode> bySymbol = new HashMap<>();
         if (snapshot != null) {
             for (JsonNode item : snapshot.path("items")) {
+                if (snapshot.path("tradeDate").isNull()
+                        && (!item.path("priceSeries").isArray() || !item.path("priceSeries").isEmpty())) {
+                    throw unavailable("无交易日期的 ETF 快照不能包含日内采样点");
+                }
                 String symbol = item.path("symbol").textValue();
                 if (symbol != null && !symbol.isBlank() && bySymbol.putIfAbsent(symbol, item) != null) {
                     throw unavailable("ETF 快照含重复代码");
@@ -107,8 +111,13 @@ public class EtfMonitorDashboardService {
         etf.put("sortOrder", sortOrder);
         etf.set("profile", profile(symbol));
         JsonNode rawQuote = item == null ? null : item.get("quote");
-        String quoteDate = validQuoteDate(rawQuote);
-        JsonNode quote = quoteDate == null ? null : rawQuote;
+        JsonNode quote = validQuote(rawQuote) ? rawQuote : null;
+        String quoteDate = quote == null ? null : quote.path("tradeDate").textValue();
+        boolean undatedQuote = quote != null && quoteDate == null;
+        if (undatedQuote && (!item.path("priceSeries").isArray() || !item.path("priceSeries").isEmpty())) {
+            // 未知日期的新报价不与保留的历史曲线拼成同一张卡，也不伪造交易日期。
+            throw unavailable("无交易日期的 ETF 报价不能包含日内采样点");
+        }
         String seriesDate = null;
         if (item != null && item.path("priceSeries").isArray()) {
             for (JsonNode point : item.path("priceSeries")) {
@@ -119,9 +128,9 @@ public class EtfMonitorDashboardService {
                 }
             }
         }
-        String effectiveDate = quoteDate == null ? seriesDate : seriesDate == null
+        String effectiveDate = undatedQuote ? null : quoteDate == null ? seriesDate : seriesDate == null
                 ? quoteDate : quoteDate.compareTo(seriesDate) >= 0 ? quoteDate : seriesDate;
-        if (quote != null && !quoteDate.equals(effectiveDate)) quote = null;
+        if (quote != null && !undatedQuote && !quoteDate.equals(effectiveDate)) quote = null;
         etf.set("quote", quote == null ? json.nullNode() : quote.deepCopy());
         ArrayNode series = json.createArrayNode();
         if (item != null && item.path("priceSeries").isArray()) {
@@ -139,7 +148,7 @@ public class EtfMonitorDashboardService {
         etf.put("fundFlowStatus", "NO_RELIABLE_SOURCE");
         putNullable(etf, "effectiveTradeDate", effectiveDate);
         String today = LocalDate.now(MarketDataConstants.SHANGHAI).toString();
-        etf.put("dataStatus", effectiveDate == null ? "NO_DATA" : !today.equals(effectiveDate)
+        etf.put("dataStatus", undatedQuote ? "DELAYED" : effectiveDate == null ? "NO_DATA" : !today.equals(effectiveDate)
                 ? "HISTORICAL" : quote != null && "FRESH".equals(quote.path("status").textValue())
                 ? "CURRENT" : "DELAYED");
         etf.put("closeConfirmed", false);
@@ -218,15 +227,16 @@ public class EtfMonitorDashboardService {
         }
     }
 
-    private String validQuoteDate(JsonNode quote) {
+    private boolean validQuote(JsonNode quote) {
         if (quote == null || !quote.isObject() || !"SINA_ETF".equals(quote.path("source").textValue())
                 || !quote.path("sourceTime").isNull() || !quote.path("price").isNumber()
+                || quote.path("price").isFloatingPointNumber() && !Double.isFinite(quote.path("price").doubleValue())
                 || quote.path("price").decimalValue().signum() <= 0
+                || !isNullableDate(quote.get("tradeDate"))
                 || !validTime(quote.path("collectedAt").textValue())) {
-            return null;
+            return false;
         }
-        String date = quote.path("tradeDate").textValue();
-        return validDate(date) ? date : null;
+        return true;
     }
 
     private JsonNode parseRequired(String raw, String error) {
@@ -256,6 +266,10 @@ public class EtfMonitorDashboardService {
         } catch (RuntimeException exception) {
             return false;
         }
+    }
+
+    private boolean isNullableDate(JsonNode value) {
+        return value != null && (value.isNull() || value.isTextual() && validDate(value.textValue()));
     }
 
     private boolean validTime(String value) {

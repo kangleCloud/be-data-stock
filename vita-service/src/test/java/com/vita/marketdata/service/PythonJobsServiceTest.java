@@ -1,6 +1,7 @@
 package com.vita.marketdata.service;
 
 import com.vita.core.exception.ServiceException;
+import com.vita.marketdata.enums.CollectionMode;
 import com.vita.marketdata.enums.PythonJobKind;
 import com.vita.marketdata.property.StockMonitorProperty;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,32 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class PythonJobsServiceTest {
+    @ParameterizedTest
+    @EnumSource(PythonJobKind.class)
+    void localManualModeIsSentForAllFourJobs(PythonJobKind kind) {
+        var builder = RestClient.builder();
+        var server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://python.test/internal/jobs/v1/" + kind.getPath() + "/refresh"))
+                .andExpect(header("X-Internal-Token", "test-only"))
+                .andExpect(header("X-Collection-Mode", "manual"))
+                .andRespond(withSuccess("{\"kind\":\"" + kind.getPath()
+                        + "\",\"state\":\"SUCCEEDED\",\"outcome\":\"success\","
+                        + "\"startedAt\":\"2026-10-10T10:00:00+08:00\",\"finishedAt\":\"2026-10-10T10:01:00+08:00\"}",MediaType.APPLICATION_JSON));
+        assertEquals("SUCCEEDED",new PythonJobsService(property(),Map.of(kind,builder.build()))
+                .refresh(kind,CollectionMode.MANUAL).state());
+        server.verify();
+    }
+
+    @ParameterizedTest
+    @EnumSource(CollectionMode.class)
+    void socketTimeoutForEitherModeRemainsGatewayTimeout(CollectionMode mode) {
+        var builder=RestClient.builder();var server=MockRestServiceServer.bindTo(builder).build();
+        server.expect(anything()).andExpect(header("X-Collection-Mode",mode.getHeaderValue()))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withException(new java.net.SocketTimeoutException("test timeout")));
+        assertEquals(504,assertThrows(ServiceException.class,()->new PythonJobsService(property(),Map.of(PythonJobKind.MARKET,builder.build()))
+                .refresh(PythonJobKind.MARKET,mode)).getCode());server.verify();
+    }
+
     @ParameterizedTest
     @EnumSource(PythonJobKind.class)
     void channelBusyImmediatelyRemainsLockedForEveryFixedKind(PythonJobKind kind) {
@@ -71,6 +98,7 @@ class PythonJobsServiceTest {
             MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
             server.expect(requestTo("http://python.test/internal/jobs/v1/" + kind.getPath() + "/refresh"))
                     .andExpect(method(HttpMethod.POST)).andExpect(header("X-Internal-Token", "test-only"))
+                    .andExpect(header("X-Collection-Mode", "auto"))
                     .andExpect(content().json("{}"))
                     .andRespond(withSuccess("{\"kind\":\"" + kind.getPath()
                             + "\",\"state\":\"PARTIAL\",\"outcome\":\"partial\","

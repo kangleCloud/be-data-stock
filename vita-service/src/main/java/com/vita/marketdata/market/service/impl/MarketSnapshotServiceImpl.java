@@ -150,7 +150,7 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
                 if (!data.isNull()) {
                     throw new IllegalArgumentException("首次失败模块数据必须为空: " + name);
                 }
-            } else if (data.isNull() || !module.path("tradeDate").isTextual()
+            } else if (data.isNull()
                     || !validOffsetTime(module.get("lastSuccessAt"))) {
                 throw new IllegalArgumentException("成功模块缺少数据或时间: " + name);
             }
@@ -191,7 +191,8 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
                     || !isNullableFiniteNumber(item, "low") || !isNullableFiniteNumber(item, "volume")
                     || !isNullableFiniteNumber(item, "amount") || !item.path("sourceTime").isNull()
                     || !validCollectionTime(item.get("collectedAt"), tradeDate)
-                    || !item.path("series").isArray()) {
+                    || !item.path("series").isArray()
+                    || tradeDate == null && !item.path("series").isEmpty()) {
                 return false;
             }
             Instant previous = null;
@@ -244,7 +245,8 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
         if (!data.isObject() || !hasMarketFields(data)
                 || !"THS_INDIVIDUAL_AGGREGATE".equals(data.path("source").textValue())
                 || data.has("reconciledFromLegacy") && !data.path("reconciledFromLegacy").isBoolean()
-                || !data.path("latest").isObject() || !data.path("series").isArray()) {
+                || !data.path("latest").isObject() || !data.path("series").isArray()
+                || tradeDate == null && !data.path("series").isEmpty()) {
             return false;
         }
         JsonNode latest = data.path("latest");
@@ -344,8 +346,9 @@ public class MarketSnapshotServiceImpl implements MarketSnapshotService {
     }
 
     private boolean validCollectionTime(JsonNode time, String tradeDate) {
-        return validOffsetTime(time) && tradeDate.equals(OffsetDateTime.parse(time.textValue())
-                .atZoneSameInstant(MarketDataConstants.SHANGHAI).toLocalDate().toString());
+        // 无可靠交易日期时允许实际采集时刻，但资金／指数的无日期曲线必须为空。
+        return validOffsetTime(time) && (tradeDate == null || tradeDate.equals(OffsetDateTime.parse(time.textValue())
+                .atZoneSameInstant(MarketDataConstants.SHANGHAI).toLocalDate().toString()));
     }
 
     private boolean hasExactlyFields(JsonNode object, Set<String> expectedFields) {

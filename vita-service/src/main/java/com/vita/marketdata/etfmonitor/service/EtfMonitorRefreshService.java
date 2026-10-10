@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vita.core.exception.GlobalErrorCode;
 import com.vita.core.exception.ServiceException;
 import com.vita.marketdata.constant.MarketDataConstants;
+import com.vita.marketdata.enums.CollectionMode;
 import com.vita.marketdata.etfmonitor.constant.EtfMonitorConstants;
 import com.vita.marketdata.etfmonitor.dto.EtfRefreshResult;
 import com.vita.marketdata.etfmonitor.entity.EtfAssetAllocationReport;
@@ -61,21 +62,29 @@ public class EtfMonitorRefreshService {
     }
 
     public EtfRefreshResult refresh() {
-        return run(() -> {
-            synchronizeDictionary();
-            return synchronizeProfiles();
+        return run(CollectionMode.AUTO, () -> {
+            synchronizeDictionary(CollectionMode.AUTO);
+            return synchronizeProfiles(CollectionMode.AUTO);
         });
     }
 
     public EtfRefreshResult refreshDictionary() {
-        return run(() -> {
-            synchronizeDictionary();
+        return refreshDictionary(CollectionMode.AUTO);
+    }
+
+    public EtfRefreshResult refreshDictionary(CollectionMode mode) {
+        return run(mode, () -> {
+            synchronizeDictionary(mode);
             return "SUCCESS";
         });
     }
 
     public EtfRefreshResult refreshProfiles() {
-        return run(this::synchronizeProfiles);
+        return refreshProfiles(CollectionMode.AUTO);
+    }
+
+    public EtfRefreshResult refreshProfiles(CollectionMode mode) {
+        return run(mode, () -> synchronizeProfiles(mode));
     }
 
     public EtfRefreshResult refreshAllocation(String symbol, String reportPeriod) {
@@ -91,15 +100,17 @@ public class EtfMonitorRefreshService {
         } catch (RuntimeException exception) {
             throw badRequest("报告期日期不合法");
         }
-        return run(() -> {
+        return run(CollectionMode.AUTO, () -> {
             synchronizeAllocation(symbol, reportPeriod);
             return "SUCCESS";
         });
     }
 
-    private EtfRefreshResult run(Supplier<String> action) {
-        String token = lock.acquire(EtfMonitorConstants.REFRESH_LOCK, Duration.ofMinutes(15));
-        if (token == null) {
+    private EtfRefreshResult run(CollectionMode mode, Supplier<String> action) {
+        // MANUAL 仅绕过采集准入；后续 CONFIG_LOCK、事务和 resync 与 AUTO 共用。
+        String token = mode == CollectionMode.MANUAL ? null
+                : lock.acquire(EtfMonitorConstants.REFRESH_LOCK, Duration.ofMinutes(15));
+        if (mode != CollectionMode.MANUAL && token == null) {
             throw new ServiceException(GlobalErrorCode.LOCKED.getCode(), "ETF 同步正在执行");
         }
         String started = OffsetDateTime.now(MarketDataConstants.SHANGHAI).toString();
@@ -108,12 +119,12 @@ public class EtfMonitorRefreshService {
             return new EtfRefreshResult(status, started, OffsetDateTime.now(MarketDataConstants.SHANGHAI).toString(),
                     "PARTIAL".equals(status) ? "部分同花顺基本资料暂不可用，失败项保留已成功取得的同花顺资料" : null);
         } finally {
-            lock.release(EtfMonitorConstants.REFRESH_LOCK, token);
+            if (token != null) lock.release(EtfMonitorConstants.REFRESH_LOCK, token);
         }
     }
 
-    private void synchronizeDictionary() {
-        JsonNode response = python.dictionary();
+    private void synchronizeDictionary(CollectionMode mode) {
+        JsonNode response = python.dictionary(mode);
         if (response == null || response.path("schemaVersion").asInt(-1) != 1
                 || !"SINA".equals(response.path("source").textValue())
                 || !response.path("etfs").isArray() || response.path("etfs").isEmpty()) {
@@ -157,12 +168,12 @@ public class EtfMonitorRefreshService {
         });
     }
 
-    private String synchronizeProfiles() {
+    private String synchronizeProfiles(CollectionMode mode) {
         List<String> symbols = configService.list().stream().map(item -> item.symbol()).toList();
         if (symbols.isEmpty()) return "SUCCESS";
         if (symbols.size() > MarketDataConstants.MAX_MONITORS) throw unavailable("ETF 启用数量超过 10");
         // 基本资料不受雪球总闸控制，也不进入 120 秒行情采样；Python 独立负责 30 分钟间隔。
-        JsonNode response = python.profiles(Map.of("symbols", symbols));
+        JsonNode response = python.profiles(Map.of("symbols", symbols), mode);
         if (response == null || response.path("schemaVersion").asInt(-1) != 1
                 || !"THS".equals(response.path("source").textValue())
                 || !response.path("profiles").isArray() || !response.path("sourceStatus").isObject()) {

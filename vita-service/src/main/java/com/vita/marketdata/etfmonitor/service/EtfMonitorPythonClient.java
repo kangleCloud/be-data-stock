@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vita.core.exception.GlobalErrorCode;
 import com.vita.core.exception.ServiceException;
+import com.vita.marketdata.enums.CollectionMode;
 import com.vita.marketdata.property.StockMonitorProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -51,24 +52,33 @@ public class EtfMonitorPythonClient {
     }
 
     public JsonNode dictionary() {
-        return post(dictionaryClient, "/internal/etf-monitor/v1/dictionary", Map.of());
+        return dictionary(CollectionMode.AUTO);
+    }
+
+    public JsonNode dictionary(CollectionMode mode) {
+        return post(dictionaryClient, "/internal/etf-monitor/v1/dictionary", Map.of(), mode);
     }
 
     public JsonNode profiles(Object request) {
-        return post(profilesClient, "/internal/etf-monitor/v1/profiles", request);
+        return profiles(request, CollectionMode.AUTO);
+    }
+
+    public JsonNode profiles(Object request, CollectionMode mode) {
+        return post(profilesClient, "/internal/etf-monitor/v1/profiles", request, mode);
     }
 
     public JsonNode assetAllocation(Object request) {
-        return post(allocationClient, "/internal/etf-monitor/v1/asset-allocation", request);
+        return post(allocationClient, "/internal/etf-monitor/v1/asset-allocation", request, CollectionMode.AUTO);
     }
 
-    private JsonNode post(RestClient client, String path, Object body) {
+    private JsonNode post(RestClient client, String path, Object body, CollectionMode mode) {
         if (baseUrl == null || baseUrl.isBlank() || token == null || token.isBlank()) {
             throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "Python 内部接口未配置");
         }
         try {
             return client.post().uri(baseUrl.replaceAll("/+$", "") + path)
-                    .header("X-Internal-Token", token).body(body).retrieve()
+                    .header("X-Internal-Token", token).header("X-Collection-Mode", mode.getHeaderValue())
+                    .body(body).retrieve()
                     .onStatus(code -> code.value() == 409, (request, response) -> {
                         throw new ServiceException(GlobalErrorCode.LOCKED.getCode(), "采集任务正在执行，请等待完成后重试");
                     })

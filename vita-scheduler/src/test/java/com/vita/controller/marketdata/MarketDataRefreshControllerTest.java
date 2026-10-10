@@ -2,6 +2,7 @@ package com.vita.controller.marketdata;
 
 import com.vita.config.MarketDataLocalAuthConfiguration;
 import com.vita.core.exception.ServiceException;
+import com.vita.marketdata.enums.CollectionMode;
 import com.vita.marketdata.enums.PythonJobKind;
 import com.vita.marketdata.etfmonitor.service.EtfMonitorRefreshService;
 import com.vita.marketdata.service.PythonJobsService;
@@ -18,6 +19,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class MarketDataRefreshControllerTest {
     @Test
+    void inboundModeCannotChangeServerManualChoiceForAnyLocalEntry() throws Exception {
+        var stocks=mock(StockMonitorRefreshService.class);var etfs=mock(EtfMonitorRefreshService.class);var jobs=mock(PythonJobsService.class);
+        var mvc=MockMvcBuilders.standaloneSetup(new MarketDataRefreshController(stocks,etfs,jobs)).build();
+        var paths=new MarketDataLocalAuthConfiguration().marketDataLocalPaths().paths();
+        for(String mode:java.util.List.of("manual","auto","invalid")) {
+            for(String path:paths) mvc.perform(post(path).header("X-Collection-Mode",mode)
+                    .with(request->{request.setRemoteAddr("127.0.0.1");return request;})).andExpect(status().isOk());
+        }
+        verify(stocks,times(3)).refreshDictionary(CollectionMode.MANUAL);verify(stocks,times(3)).refreshProfiles(CollectionMode.MANUAL);
+        verify(etfs,times(3)).refreshDictionary(CollectionMode.MANUAL);verify(etfs,times(3)).refreshProfiles(CollectionMode.MANUAL);
+        for(PythonJobKind kind:PythonJobKind.values())verify(jobs,times(3)).refresh(kind,CollectionMode.MANUAL);
+        verifyNoMoreInteractions(stocks,etfs,jobs);
+    }
+
+    @Test
     void routesEightFixedPostOperationsAndRemovesOldEntries() throws Exception {
         var stocks = mock(StockMonitorRefreshService.class);
         var etfs = mock(EtfMonitorRefreshService.class);
@@ -26,15 +42,15 @@ class MarketDataRefreshControllerTest {
         var paths = new MarketDataLocalAuthConfiguration().marketDataLocalPaths().paths();
         assertEquals(8, paths.size());
         for (String path : paths) {
-            mvc.perform(post(path).with(request -> { request.setRemoteAddr("127.0.0.1"); return request; }))
+            mvc.perform(post(path).header("X-Collection-Mode", "auto").with(request -> { request.setRemoteAddr("127.0.0.1"); return request; }))
                     .andExpect(status().isOk());
             mvc.perform(get(path)).andExpect(status().isMethodNotAllowed());
         }
-        verify(stocks).refreshDictionary();
-        verify(stocks).refreshProfiles();
-        verify(etfs).refreshDictionary();
-        verify(etfs).refreshProfiles();
-        for (PythonJobKind kind : PythonJobKind.values()) verify(jobs).refresh(kind);
+        verify(stocks).refreshDictionary(CollectionMode.MANUAL);
+        verify(stocks).refreshProfiles(CollectionMode.MANUAL);
+        verify(etfs).refreshDictionary(CollectionMode.MANUAL);
+        verify(etfs).refreshProfiles(CollectionMode.MANUAL);
+        for (PythonJobKind kind : PythonJobKind.values()) verify(jobs).refresh(kind, CollectionMode.MANUAL);
         verifyNoMoreInteractions(stocks, etfs, jobs);
         for (String path : new String[]{"/internal/stock-monitor/v1/refresh",
                 "/local/stock-monitor/v1/dictionary/refresh", "/local/stock-monitor/v1/profiles/refresh",

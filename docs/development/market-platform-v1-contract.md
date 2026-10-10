@@ -2,11 +2,15 @@
 
 本契约适用于市场总览、个股监控和 ETF 监控。行情采集统一经 AKShare，真实来源不得为东方财富。金额单位元，价格单位元或指数点位，涨跌幅数值单位百分数。缺失值返回 JSON `null`，不得用 0 或估算值填充。所有时间戳为带 `+08:00` 偏移的 ISO 8601；无可靠源时间时 `sourceTime:null`，日内曲线横轴为实际 `collectedAt`。
 
-采集版本固定 AKShare `1.18.97`。Python 采集容器内存固定 1GiB，`memory=1g`、`memory-swap=1g`，不增加额外 swap；保护阈值为 800MiB。全局源进程最多 2 个，同一来源最多 2 个，不自动扩大内存。Java 保留同步等待终态、内部 Token 和固定本机入口，不新增 jobId 或补采来源。新浪 ETF 交易行情不得改用 `fund_etf_spot_ths`（基金净值）。
+采集版本固定 AKShare `1.18.97`。Python 采集容器内存固定 1GiB，`memory=1g`、`memory-swap=1g`，不增加额外 swap；保护阈值为 800MiB。AUTO 全局源进程最多 2 个，同一来源最多 2 个；本机 MANUAL 跳过任务并发配额但仍受内存保护，不自动扩大内存。Java 保留同步等待终态、内部 Token 和固定本机入口，不新增 jobId 或补采来源。新浪 ETF 交易行情不得改用 `fund_etf_spot_ths`（基金净值）。
 
-资金与行情使用独立通道。资金通道只调用一次 `stock_fund_flow_individual("即时")`，从同一批数据生成市场资金、涨跌家数及启用股票资金；行情通道按股票、ETF、指数、行业、概念顺序采集。每条通道两次启动至少间隔 120 秒，不重叠、不排队；慢资金轮不能阻塞行情，已完成模块及时发布。120 秒不是实际更新周期保证，慢轮及冷却可能延长更新间隔。手动市场整体刷新沿用原入口，同步取得两条通道准入；任一通道忙立即返回冲突，不持有一条通道等待另一条。其他刷新使用行情通道准入，Python 409 仍映射 Java 423。交易日期以可靠交易日信息判定，不将工作日直接等同交易日。
+AUTO 资金与行情使用独立通道。资金通道只调用一次 `stock_fund_flow_individual("即时")`，从同一批数据生成市场资金、涨跌家数及启用股票资金；行情通道按股票、ETF、指数、行业、概念顺序采集。每条通道两次启动至少间隔 120 秒，不重叠、不排队；慢资金轮不能阻塞行情，已完成模块及时发布。120 秒不是实际更新周期保证，慢轮及冷却可能延长更新间隔。AUTO 市场整体刷新同步取得两条通道准入；任一通道忙立即返回冲突，不持有一条通道等待另一条。其他 AUTO 刷新使用行情通道准入，Python 409 仍映射 Java 423。本机 MANUAL 使用下述隔离规则。交易日期以可靠交易日信息判定，不将工作日直接等同交易日。
 
 市场发布只合并本次变化模块，保留其他通道已发布内容；Redis `WATCH/MULTI/EXEC` 首次尝试后最多重试 3 次，合计最多 4 次，快照、版本和通知在同一事务提交，冲突耗尽不发布。股票资金、stateId 与通知继续受既有监控锁和事务保护；失败仅更新状态与诊断，不伪造资金点。Redis 键、频道、V1 GET/SSE 路径及消息结构保持不变。
+
+## 本机手动采集隔离
+
+八个 scheduler 本机入口传递请求级 `CollectionMode.MANUAL`，admin、timer 及其他无模式方法保持 AUTO。手动同步结果只属于本次响应，不覆盖全局自动 RUNNING／终态记录，不新增 jobId 或业务 Redis 键。MANUAL 跳过任务触发间隔、普通失败冷却、任务／入口锁和源并发配额；短写锁、MySQL 事务、启用上限、源校验、资料保留、缓存合并及 resync 继续生效。共享实际 HTTP 限速、401/403/429 和明确风控保护、800MiB 内存保护、超时及回收不得绕过。休市／时段外允许尝试，日期与曲线只取真实可靠数据，不能伪造。精确方法映射、准入差异与 curl 见 [本机刷新契约](python-jobs-local-api.md#单次模式与准入隔离)。
 
 ## 输入与 XSS 边界
 
@@ -16,7 +20,7 @@
 
 ## 加载与事件
 
-首次进入、SSE 断流或版本缺口、页面恢复可见及普通手动刷新时 GET 完整缓存；正常更新由 SSE 推送，不固定每 10 秒 GET。普通刷新不触发 AKShare。服务器本机 scheduler 通过 [八个固定入口](python-jobs-local-api.md) 同步等待刷新结果，不生成 Java `jobId`。入口只允许真实回环直连、拒绝转发头，无需入站令牌；Java→Python 继续携带 `X-Internal-Token`。
+首次进入、SSE 断流或版本缺口、页面恢复可见及普通手动刷新时 GET 完整缓存；正常更新由 SSE 推送，不固定每 10 秒 GET。普通刷新不触发 AKShare。服务器本机 scheduler 通过 [八个固定入口](python-jobs-local-api.md) 同步等待刷新结果，不生成 Java `jobId`。入口只允许真实回环直连、拒绝转发头，无需入站令牌；服务端固定 MANUAL，不接收调用者模式选择。Java→Python 继续携带 `X-Internal-Token`，并以 `X-Collection-Mode` 明确传递 auto/manual，Python 缺省 auto、先鉴权再解析、无效值 400。
 
 三个 SSE 都以 `ready` 发送当前版本；版本连续时发送 `patch`，旧缓存无版本、乱序/漏事件或无法构造补丁时发送 `resync`，客户端重新 GET 后建流。版本缺失是 JSON `null`，不能序列化为字符串 `"null"`。断线重连应先 GET，再建立 SSE；`ready` 版本与 GET 不同则再 GET。
 
@@ -31,6 +35,14 @@
 | ETF | `/openapi/api/etf-monitor/v1/dashboard` | `/openapi/api/etf-monitor/v1/stream` | `stock:etf-monitor:v1:snapshot`、`stock:etf-monitor:v1:state-id`、`stock:etf-monitor:v1:updates` |
 
 这些路径仅精确放行 GET；管理端需登录；scheduler 八个本机入口免登录但严格限制回环直连。三个看板维持 `schemaVersion:1`。个股与 ETF 各自最多启用 10 只，不共享额度。
+
+## 未知交易日期的源值
+
+MANUAL 在休市、交易时段外或可靠交易日信息不可用时取得的合法源值，可以沿用 V1 发布 `tradeDate:null`。Java GET 与 SSE 使用相同读取校验：市场 `FRESH`／`STALE` 仍要求合法来源、数据、`lastSuccessAt`、`lastAttemptAt`、资金数值及非负且总数一致的涨跌家数；不因日期未知放宽这些字段。
+
+市场资金 `data.series` 和每个指数的 `series` 必须为 `[]`。最新资金值及指数项的 `collectedAt` 保留实际带时区采集时间，不与空日期比较；`sourceTime` 继续按原契约保留。已知日期的资金与指数点仍须属于上海同一交易日期且时间严格递增。未知日期包含曲线点的缓存读取失败，SSE 发出 `resync`。
+
+ETF 快照及合法新浪 `quote` 支持显式 `tradeDate:null`，`priceSeries` 必须为 `[]`。公开报价保留真实价格、`collectedAt`、`sourceTime:null`，并返回 `effectiveTradeDate:null`、`dataStatus:"DELAYED"`、`series:[]`、`fundSeries:[]`。不得用采集日推测交易日、标记 `CURRENT` 或将无日期报价拼接到历史曲线。缺失日期字段、非法日期及无日期报价携带历史点仍按无效缓存处理；无效报价字段沿用既有空报价降级规则。
 
 ## 市场 `coreIndices`
 
@@ -184,6 +196,6 @@ ETF `POST /admin/api/system/etfMonitor/refresh` 与每日定时任务复用同�
 
 `sourceStatus` 必须精确覆盖请求 symbol，只允许 `OK/ERROR/SKIPPED`；仅 `OK` 且代码、THS 来源、字段及采集时间合法的资料落库。全部有效为 `SUCCESS`，部分有效为 `PARTIAL` 并保留失败项；无有效资料明确返回业务失败（503），不发布本次资料 resync。空启用清单为无需采集的成功。成功资料写入后用既有 resync 推进版本，GET/SSE 路径、schemaVersion 1、快照 Redis 键与通知契约不变。
 
-Java 读取预算：字典 60 秒、资料 210 秒、资产配置 120 秒；前端整体刷新 300 秒。Python 最多十只串行、源请求间隔至少 2 秒、总预算 180 秒，超预算标 SKIPPED；每股 30 分钟间隔由 Python 保证。Python 独占资料批次锁 `stock:etf-monitor:v1:profiles:python:lock`（210 秒）和 `stock:etf-monitor:v1:profiles:python:min-interval:{symbol}`；Java 继续持有原 `refresh:lock` 和短期 `config:lock`，不与 Python 共用同一把锁。Python 409 映射 423、429 保持 429、无有效资料或上游错误为 503。
+Java 读取预算：字典 60 秒、资料 210 秒、资产配置 120 秒；前端整体刷新 300 秒。Python 最多十只串行、源请求间隔至少 2 秒、总预算 180 秒，超预算标 SKIPPED；AUTO 每股 30 分钟间隔由 Python 保证。AUTO Python 独占资料批次锁 `stock:etf-monitor:v1:profiles:python:lock`（210 秒）和 `stock:etf-monitor:v1:profiles:python:min-interval:{symbol}`；AUTO Java 继续持有原 `refresh:lock` 和短期 `config:lock`，不与 Python 共用同一把锁；本机 MANUAL 不占用任务锁／触发间隔，但保留 `config:lock` 与写入事务。Python 409 映射 423、429 保持 429、无有效资料或上游错误为 503。
 
 部署须先备份并按流程执行 [ETF 资料表重建 SQL](../../sql/upgrade/20261003_etf_profile_ths.sql)，再启动匹配的新应用版本；新 Entity 会查询新增列，不能先在旧 schema 上启动新版本。初始化与首版建表 SQL 已同步七个可空业务列；该脚本执行 `DROP TABLE IF EXISTS etf_monitor_profile` 后重新建表，表内全部原记录及审计信息会删除，重复执行也会清空后续取得的资料，不能作为保留数据的增量迁移。本次开发未执行真实数据库迁移或部署验证。

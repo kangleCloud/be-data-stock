@@ -2,6 +2,7 @@ package com.vita.marketdata.etfmonitor.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vita.core.exception.ServiceException;
+import com.vita.marketdata.enums.CollectionMode;
 import com.vita.marketdata.etfmonitor.constant.EtfMonitorConstants;
 import com.vita.marketdata.etfmonitor.dto.EtfMonitorDtos;
 import com.vita.marketdata.etfmonitor.entity.EtfMonitorProfile;
@@ -41,11 +42,11 @@ class EtfMonitorRefreshServiceTest {
         when(config.list()).thenReturn(List.of(new EtfMonitorDtos.AdminEtf(
                 "SH510050", "510050", "50ETF", "SH", true, 1), new EtfMonitorDtos.AdminEtf(
                 "SZ159915", "159915", "创业板ETF", "SZ", true, 2)));
-        when(python.dictionary()).thenReturn(json.readTree("""
+        when(python.dictionary(CollectionMode.AUTO)).thenReturn(json.readTree("""
                 {"schemaVersion":1,"source":"SINA","collectedAt":"2026-10-03T10:00:00+08:00",
                  "etfs":[{"symbol":"SH510050","code":"510050","market":"SH","name":"50ETF"}]}
                 """));
-        when(python.profiles(anyMap())).thenReturn(json.readTree("""
+        when(python.profiles(anyMap(), eq(CollectionMode.AUTO))).thenReturn(json.readTree("""
                 {"schemaVersion":1,"source":"THS","collectedAt":"2026-10-03T10:03:00+08:00",
                  "profiles":[{"symbol":"SH510050","source":"THS","fullName":"上证50ETF",
                     "collectedAt":"2026-10-03T10:01:00+08:00"}],
@@ -61,8 +62,8 @@ class EtfMonitorRefreshServiceTest {
         assertNotNull(result.startedAt());
         assertNotNull(result.finishedAt());
         assertFalse(json.valueToTree(result).has("jobId"));
-        verify(python).dictionary();
-        verify(python).profiles(argThat(body -> java.util.Map.of("symbols", List.of("SH510050", "SZ159915")).equals(body)));
+        verify(python).dictionary(CollectionMode.AUTO);
+        verify(python).profiles(argThat(body -> java.util.Map.of("symbols", List.of("SH510050", "SZ159915")).equals(body)), eq(CollectionMode.AUTO));
         verifyNoMoreInteractions(python);
         verify(dictionary).upsertBatch(anyList());
         verify(config).rebuildEnabledCache();
@@ -101,7 +102,7 @@ class EtfMonitorRefreshServiceTest {
         old.setSource(null);
         when(profiles.selectOne(any(com.baomidou.mybatisplus.core.toolkit.support.SFunction.class), anyString()))
                 .thenReturn(old);
-        when(python.profiles(any())).thenReturn(new ObjectMapper().readTree("""
+        when(python.profiles(any(), eq(CollectionMode.AUTO))).thenReturn(new ObjectMapper().readTree("""
                 {"schemaVersion":1,"source":"THS","collectedAt":"2026-10-03T10:03:00+08:00",
                  "sourceStatus":{"SH510050":"OK","SZ159915":"OK"},"profiles":[
                   {"symbol":"SH510050","code":"510050","source":"THS","fullName":"上证50ETF",
@@ -136,7 +137,7 @@ class EtfMonitorRefreshServiceTest {
         var python = mock(EtfMonitorPythonClient.class);
         var config = config("SH510050", "SZ159915");
         var profiles = mock(EtfMonitorProfileMapper.class);
-        when(python.profiles(any())).thenReturn(new ObjectMapper().readTree("""
+        when(python.profiles(any(), eq(CollectionMode.AUTO))).thenReturn(new ObjectMapper().readTree("""
                 {"schemaVersion":1,"source":"THS","collectedAt":"2026-10-03T10:03:00+08:00",
                  "sourceStatus":{"SH510050":"OK","SZ159915":"OK"},"profiles":[
                   {"symbol":"SH510050","source":"THS","fullName":"上证50ETF",
@@ -156,7 +157,7 @@ class EtfMonitorRefreshServiceTest {
         var python = mock(EtfMonitorPythonClient.class);
         var config = config("SH510050");
         var profiles = mock(EtfMonitorProfileMapper.class);
-        when(python.profiles(any())).thenReturn(new ObjectMapper().readTree("""
+        when(python.profiles(any(), eq(CollectionMode.AUTO))).thenReturn(new ObjectMapper().readTree("""
                 {"schemaVersion":1,"source":"THS","collectedAt":"2026-10-03T10:03:00+08:00",
                  "sourceStatus":{"SH510050":"ERROR"},"profiles":[]}
                 """));
@@ -174,7 +175,7 @@ class EtfMonitorRefreshServiceTest {
                 "{\"symbol\":\"SH510050\",\"source\":\"SSE\",\"fullName\":\"旧资料\",\"collectedAt\":\"2026-10-03T10:01:00+08:00\"}")) {
             var python = mock(EtfMonitorPythonClient.class);
             var profiles = mock(EtfMonitorProfileMapper.class);
-            when(python.profiles(any())).thenReturn(new ObjectMapper().readTree(
+            when(python.profiles(any(), eq(CollectionMode.AUTO))).thenReturn(new ObjectMapper().readTree(
                     "{\"schemaVersion\":1,\"source\":\"THS\",\"collectedAt\":\"2026-10-03T10:03:00+08:00\","
                     + "\"sourceStatus\":{\"SH510050\":\"OK\"},\"profiles\":[" + payload + "]}"));
             assertThrows(ServiceException.class,

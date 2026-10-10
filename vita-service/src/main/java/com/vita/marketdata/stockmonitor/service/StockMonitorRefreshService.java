@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vita.core.exception.GlobalErrorCode;
 import com.vita.core.exception.ServiceException;
 import com.vita.marketdata.constant.MarketDataConstants;
+import com.vita.marketdata.enums.CollectionMode;
 import com.vita.marketdata.property.StockMonitorProperty;
 import com.vita.marketdata.stockmonitor.constant.StockMonitorConstants;
 import com.vita.marketdata.stockmonitor.dto.StockMonitorDtos;
@@ -19,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -42,6 +44,7 @@ public class StockMonitorRefreshService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final boolean xqEnabled;
+    private final TransactionTemplate transactions;
 
     private enum RefreshScope { ALL, DICTIONARY, PROFILES }
 
@@ -53,7 +56,7 @@ public class StockMonitorRefreshService {
                                       MarketDataRedisLock redisLock,
                                       StringRedisTemplate redisTemplate,
                                       ObjectMapper objectMapper,
-                                      StockMonitorProperty property) {
+                                      StockMonitorProperty property, TransactionTemplate transactions) {
         this.pythonClient = pythonClient;
         this.dictionaryMapper = dictionaryMapper;
         this.configMapper = configMapper;
@@ -63,24 +66,37 @@ public class StockMonitorRefreshService {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.xqEnabled = property.isXqEnabled();
+        this.transactions = transactions;
     }
 
     public StockMonitorDtos.RefreshStatus refresh() {
-        return refresh(RefreshScope.ALL);
+        return refresh(RefreshScope.ALL, CollectionMode.AUTO);
     }
 
     public StockMonitorDtos.RefreshStatus refreshDictionary() {
-        return refresh(RefreshScope.DICTIONARY);
+        return refreshDictionary(CollectionMode.AUTO);
+    }
+
+    public StockMonitorDtos.RefreshStatus refreshDictionary(CollectionMode mode) {
+        return refresh(RefreshScope.DICTIONARY, mode);
     }
 
     public StockMonitorDtos.RefreshStatus refreshProfiles() {
+        return refreshProfiles(CollectionMode.AUTO);
+    }
+
+    public StockMonitorDtos.RefreshStatus refreshProfiles(CollectionMode mode) {
         if (!xqEnabled) {
             throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "雪球采集总闸已关闭");
         }
-        return refresh(RefreshScope.PROFILES);
+        return refresh(RefreshScope.PROFILES, mode);
     }
 
-    private StockMonitorDtos.RefreshStatus refresh(RefreshScope scope) {
+    private StockMonitorDtos.RefreshStatus refresh(RefreshScope scope, CollectionMode mode) {
+        // 本机手动请求不占用自动准入锁、触发间隔，也不读写自动任务状态。
+        if (mode == CollectionMode.MANUAL) {
+            return execute(scope, mode);
+        }
         String token = redisLock.acquire(StockMonitorConstants.REFRESH_LOCK, Duration.ofMinutes(15));
         if (token == null) {
             StockMonitorDtos.RefreshStatus current = status();
@@ -89,15 +105,15 @@ public class StockMonitorRefreshService {
         }
         try {
             if (scope != RefreshScope.ALL) {
-                reserveManualInterval(scope);
+                reserveTriggerInterval(scope);
             }
-            return executeLocked(scope);
+            return execute(scope, mode);
         } finally {
             redisLock.release(StockMonitorConstants.REFRESH_LOCK, token);
         }
     }
 
-    private void reserveManualInterval(RefreshScope scope) {
+    private void reserveTriggerInterval(RefreshScope scope) {
         String key = scope == RefreshScope.DICTIONARY ? StockMonitorConstants.DICTIONARY_INTERVAL_KEY : StockMonitorConstants.PROFILES_INTERVAL_KEY;
         Duration interval = scope == RefreshScope.DICTIONARY ? Duration.ofMinutes(10) : Duration.ofMinutes(30);
         // 进入外部数据源之前占用间隔，失败后的频繁重试也不会触发数据源风控。
@@ -106,40 +122,46 @@ public class StockMonitorRefreshService {
         }
     }
 
-    private StockMonitorDtos.RefreshStatus executeLocked(RefreshScope scope) {
+    private StockMonitorDtos.RefreshStatus execute(RefreshScope scope, CollectionMode mode) {
         String startedAt = now();
         try {
-            writeStatus(new StockMonitorDtos.RefreshStatus(true, "RUNNING", startedAt, null, null));
+            if (mode == CollectionMode.AUTO) {
+                writeStatus(new StockMonitorDtos.RefreshStatus(true, "RUNNING", startedAt, null, null));
+            }
             if (scope != RefreshScope.PROFILES) {
-                synchronizeDictionary(pythonClient.exchangeDictionary());
-                withConfigLock(monitorService::rebuildEnabledCache);
+                var dictionary = pythonClient.exchangeDictionary(mode);
+                withConfigLock(() -> {
+                    // 源请求完成后才取短写锁；字典批次提交成功再重建缓存。
+                    transactions.executeWithoutResult(status -> synchronizeDictionary(dictionary));
+                    monitorService.rebuildEnabledCache();
+                });
             }
             if (scope == RefreshScope.PROFILES || (scope == RefreshScope.ALL && xqEnabled)) {
-                refreshEnabledProfiles();
+                refreshEnabledProfiles(mode);
             }
             StockMonitorDtos.RefreshStatus result = new StockMonitorDtos.RefreshStatus(
                     true, "SUCCESS", startedAt, now(), scope == RefreshScope.ALL ? null
                     : scope == RefreshScope.DICTIONARY ? "交易所字典刷新完成" : "已启用股票资料刷新完成");
-            writeStatus(result);
+            if (mode == CollectionMode.AUTO) writeStatus(result);
             return result;
         } catch (Exception exception) {
             LOG.error("个股监控刷新失败", exception);
             StockMonitorDtos.RefreshStatus result = new StockMonitorDtos.RefreshStatus(
                     true, "ERROR", startedAt, now(), "刷新失败，请检查服务日志");
-            writeStatus(result);
+            if (mode == CollectionMode.AUTO) writeStatus(result);
             return result;
         }
     }
 
-    private void refreshEnabledProfiles() {
+    private void refreshEnabledProfiles(CollectionMode mode) {
         List<String> symbols = monitorService.enabledSymbols();
         if (symbols.size() > MarketDataConstants.MAX_MONITORS) {
             throw new ServiceException(GlobalErrorCode.SERVICE_UNAVAILABLE.getCode(), "启用股票超过 10 只");
         }
         if (!symbols.isEmpty()) {
-            List<StockMonitorPythonClient.ProfileItem> profiles = pythonClient.profiles(symbols);
+            List<StockMonitorPythonClient.ProfileItem> profiles = pythonClient.profiles(symbols, mode);
             withConfigLock(() -> {
-                synchronizeProfiles(symbols, profiles);
+                transactions.executeWithoutResult(status -> synchronizeProfiles(symbols, profiles));
                 monitorService.publishResync();
             });
         }

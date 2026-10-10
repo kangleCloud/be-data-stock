@@ -3,6 +3,7 @@ package com.vita.marketdata.service;
 import com.vita.core.exception.GlobalErrorCode;
 import com.vita.core.exception.ServiceException;
 import com.vita.marketdata.dto.PythonRunResult;
+import com.vita.marketdata.enums.CollectionMode;
 import com.vita.marketdata.enums.PythonJobKind;
 import com.vita.marketdata.property.StockMonitorProperty;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +22,9 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
 
-/** Scheduler 直连 Python 并等待手动任务终态；不在 Java 侧创建第二套任务 ID。 */
+/**
+ * Scheduler 直连 Python 并等待手动任务终态；不在 Java 侧创建第二套任务 ID。
+ */
 @Service
 public class PythonJobsService {
     private static final Set<String> TERMINAL_STATES = Set.of("SUCCEEDED", "PARTIAL", "SKIPPED", "FAILED");
@@ -42,13 +45,20 @@ public class PythonJobsService {
     }
 
     public PythonRunResult refresh(PythonJobKind kind) {
+        return refresh(kind, CollectionMode.AUTO);
+    }
+
+    public PythonRunResult refresh(PythonJobKind kind, CollectionMode mode) {
         String path = "/internal/jobs/v1/" + kind.getPath() + "/refresh";
         try {
             String target = url(path);
             ResponseEntity<PythonRunResult> response = clients.get(kind).post().uri(target)
-                    .header("X-Internal-Token", token).body(Map.of()).retrieve()
+                    .header("X-Internal-Token", token).header("X-Collection-Mode", mode.getHeaderValue())
+                    .body(Map.of()).retrieve()
                     .onStatus(code -> code.value() == 409,
-                            (request, result) -> { throw new ServiceException(GlobalErrorCode.LOCKED); })
+                            (request, result) -> {
+                                throw new ServiceException(GlobalErrorCode.LOCKED);
+                            })
                     .toEntity(PythonRunResult.class);
             if (response.getStatusCode().value() != 200 || !validResult(response.getBody(), kind)) {
                 throw unavailable("Python 任务响应格式错误");
