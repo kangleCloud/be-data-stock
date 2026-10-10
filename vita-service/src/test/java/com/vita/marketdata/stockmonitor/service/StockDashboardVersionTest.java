@@ -128,6 +128,49 @@ class StockDashboardVersionTest {
         verifyNoInteractions(profiles);
     }
 
+    @Test
+    void fundsFailureNoticeChangesStateWithoutInventingFundPoint() throws Exception {
+        String today = LocalDate.now(ZoneId.of("Asia/Shanghai")).toString();
+        cache.put(StockMonitorConstants.LAST_TRADE_DATE_KEY, today);
+        cache.put(quoteKey, quote(10).replace(date, today));
+        String todayFundKey = StockMonitorConstants.FUND_SERIES_PREFIX + today + ":SH600000";
+        String retained = funds(100).replace(date, today);
+        cache.put(todayFundKey, retained);
+        var module = json.createObjectNode().put("tradeDate", today).put("status", "FRESH");
+        module.putObject("data");
+        var snapshot = json.createObjectNode(); snapshot.putObject("modules").set("marketFundFlow", module);
+        cache.put(MarketConstants.SNAPSHOT_KEY, snapshot.toString());
+        var monitor = service(true);
+        assertEquals("AVAILABLE", monitor.dashboard().stocks().get(0).fundFlowStatus());
+        var stream = spy(new StockMonitorStreamService(monitor, json, mock(java.util.concurrent.ScheduledExecutorService.class)));
+        var emitter = mock(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.class);
+        var events = com.vita.marketdata.support.SseEventCapture.attach(emitter, json);
+        doReturn(emitter).when(stream).createEmitter();
+        try {
+            stream.open();
+            module.put("status", "STALE").put("message", "RESOURCE")
+                    .put("lastAttemptAt", today + "T15:11:00+08:00");
+            cache.put(MarketConstants.SNAPSHOT_KEY, snapshot.toString());
+            version.set(2);
+            var notice = json.createObjectNode().put("baseStateId", id(1)).put("stateId", id(2));
+            notice.putArray("changedSymbols").add("SH600000");
+            stream.onMessage(com.vita.marketdata.support.SseEventCapture.message(notice), null);
+            var event = events.get(1);
+            assertEquals("patch", event.path("event").asText());
+            assertEquals(id(1), event.path("data").path("baseStateId").asText());
+            assertEquals(id(2), event.path("data").path("stateId").asText());
+            var card = event.path("data").path("stocks").get(0);
+            assertEquals("STALE", card.path("fundFlowStatus").asText());
+            assertTrue(card.path("fundFlowMessage").asText().contains("资源不足"));
+            assertEquals(1, card.path("fundSeries").size());
+            assertEquals(today, card.path("effectiveTradeDate").asText());
+            assertEquals(retained, cache.get(todayFundKey));
+            verify(values, never()).set(anyString(), anyString());
+        } finally {
+            stream.shutdown();
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"available", "failed", "cooldown", "resource", "historical", "noPoint",
             "wrongDate", "disabled", "duplicateConflict", "invalidPoint"})

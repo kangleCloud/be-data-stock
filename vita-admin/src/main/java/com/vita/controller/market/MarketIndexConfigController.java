@@ -5,6 +5,7 @@ import com.vita.core.CommonResult;
 import com.vita.marketdata.market.dto.MarketIndexConfigDto;
 import com.vita.marketdata.market.dto.MarketIndexUpdateRequest;
 import com.vita.marketdata.market.service.MarketIndexConfigService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,7 +27,7 @@ public class MarketIndexConfigController {
 
     @PostMapping("/update")
     @SaCheckPermission("system:index-config:update")
-    public CommonResult<MarketIndexConfigDto> update(@RequestBody MarketIndexUpdateRequest request) {
+    public CommonResult<MarketIndexConfigDto> update(@RequestBody @Valid MarketIndexUpdateRequest request) {
         return CommonResult.success(service.update(request));
     }
 }

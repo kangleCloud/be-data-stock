@@ -1,5 +1,10 @@
 package com.vita.marketdata.stockmonitor.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -49,9 +54,11 @@ public final class StockMonitorDtos {
                                 String finishedAt, String message) {
     }
 
-    public record EnabledRequest(String symbol, Boolean enabled) {
+    public record EnabledRequest(@NotBlank @Pattern(regexp = "(SH|SZ|BJ)[0-9]{6}") String symbol,
+                                 @NotNull Boolean enabled) {
     }
 
-    public record SortRequest(List<String> symbols) {
+    public record SortRequest(@NotNull @Size(max = 10)
+                              List<@NotBlank @Pattern(regexp = "(SH|SZ|BJ)[0-9]{6}") String> symbols) {
     }
 }

@@ -95,6 +95,30 @@ class MarketSnapshotStreamServiceTest {
     }
 
     @Test
+    void fundsChannelBetweenQuoteModulesKeepsContinuousPublicVersionsAndUntouchedModules() {
+        stream.open();
+        String[] completed = {"coreIndices", "marketFundFlow", "industrySectors"};
+        var originalConcept = current.get().path("modules").path("conceptSectors").deepCopy();
+        for (int i = 0; i < completed.length; i++) {
+            var merged = current.get().deepCopy();
+            merged.put("snapshotId", id(102 + i));
+            var module = (ObjectNode) merged.path("modules").path(completed[i]);
+            module.put("lastAttemptAt", "2026-10-10T10:0" + i + ":00+08:00");
+            current.set(merged);
+            stream.onMessage(message(notice(i + 1, i + 2, completed[i])), null);
+            var patch = events.get(i + 1).path("data");
+            assertEquals(id(101 + i), patch.path("baseSnapshotId").asText());
+            assertEquals(id(102 + i), patch.path("snapshotId").asText());
+            assertEquals(1, patch.path("modules").size());
+            assertEquals(module, patch.path("modules").path(completed[i]));
+            assertEquals(originalConcept, merged.path("modules").path("conceptSectors"));
+        }
+        assertEquals(4, events.size());
+        assertEquals("2026-10-10T10:01:00+08:00",
+                current.get().path("modules").path("marketFundFlow").path("lastAttemptAt").asText());
+    }
+
+    @Test
     void redisAheadOfNoticeRequiresResyncUntilReconnect() {
         stream.open();
         current.set(snapshot(3, true));

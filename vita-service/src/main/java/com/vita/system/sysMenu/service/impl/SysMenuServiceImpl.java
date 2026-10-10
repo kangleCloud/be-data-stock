@@ -30,6 +30,8 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -355,11 +357,29 @@ public class SysMenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impl
             if (CharSequenceUtil.isBlank(menu.getRouteLink())) {
                 throw new ServiceException(GlobalErrorCode.BAD_REQUEST.getCode(), "外链菜单必须填写路由地址");
             }
-            if (CharSequenceUtil.isNotBlank(menu.getRouteLink())
-                    && !CharSequenceUtil.startWithAny(menu.getRouteLink(), "http://", "https://")) {
-                throw new ServiceException(GlobalErrorCode.BAD_REQUEST.getCode(), "外链菜单的路由地址必须以 http:// 或 https:// 开头");
+            if (!validExternalLink(menu.getRouteLink())) {
+                throw new ServiceException(GlobalErrorCode.BAD_REQUEST.getCode(), "外链菜单必须为主机有效且不含控制字符的 HTTP 或 HTTPS 地址");
             }
         }
+    }
+
+    private boolean validExternalLink(String link) {
+        try {
+            URI uri = new URI(link).parseServerAuthority();
+            // 外链是浏览器导航边界，校验完整地址而非前缀；合法路径、查询及片段保持原文入库。
+            return ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                    && !uri.isOpaque() && uri.getHost() != null && !uri.getHost().isBlank()
+                    && (uri.getPort() == -1 || uri.getPort() >= 1 && uri.getPort() <= 65535)
+                    && !containsControl(link) && !containsControl(uri.getAuthority())
+                    && !containsControl(uri.getPath()) && !containsControl(uri.getQuery())
+                    && !containsControl(uri.getFragment());
+        } catch (URISyntaxException exception) {
+            return false;
+        }
+    }
+
+    private boolean containsControl(String text) {
+        return text != null && text.chars().anyMatch(Character::isISOControl);
     }
 
     /**

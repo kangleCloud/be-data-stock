@@ -1,6 +1,10 @@
 package com.vita.marketdata.etfmonitor.dto;
 
 import com.vita.marketdata.etfmonitor.entity.EtfSymbolDictionary;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -29,9 +33,11 @@ public final class EtfMonitorDtos {
                              String performanceBenchmark, String source) {
     }
 
-    public record EnabledRequest(String symbol, Boolean enabled) {
+    public record EnabledRequest(@NotBlank @Pattern(regexp = "(SH|SZ)[0-9]{6}") String symbol,
+                                 @NotNull Boolean enabled) {
     }
 
-    public record SortRequest(List<String> symbols) {
+    public record SortRequest(@NotNull @Size(max = 10)
+                              List<@NotBlank @Pattern(regexp = "(SH|SZ)[0-9]{6}") String> symbols) {
     }
 }

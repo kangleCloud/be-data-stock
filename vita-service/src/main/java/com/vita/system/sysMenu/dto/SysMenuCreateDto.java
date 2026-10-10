@@ -1,5 +1,7 @@
 package com.vita.system.sysMenu.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -57,7 +59,8 @@ public class SysMenuCreateDto {
     /**
      * 排序
      */
-    @Size(min = 0, max = 999, message = "排序必须在0到999之间")
+    @Min(value = 0, message = "排序必须在0到999之间")
+    @Max(value = 999, message = "排序必须在0到999之间")
     private Integer sortNo;
 
     /**
